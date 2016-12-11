@@ -1,0 +1,16 @@
+Are you real?
+What is your name?
+How old are you?
+Where do you live?
+How can you help me?
+Which languages do you speak?
+How are you? Are you doing ok?
+What time is it?
+What are your hobbies?
+What do you look like?
+Who is the president of the USA?
+How can I install ubuntu?
+How can I remove git?
+Where is java installed by default?
+Hello
+Are you a boy or a girl?
