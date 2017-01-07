@@ -24,6 +24,7 @@ import re
 from tensorflow.python.platform import gfile
 from collections import defaultdict
 from UDCDatasetReader import UDCDatasetReader
+from QLDatasetReader import QLDatasetReader
 
 # Special vocabulary symbols - we always put them at the start.
 _PAD = b"_PAD"
@@ -185,7 +186,7 @@ def data_to_token_ids(data_path, questions_path, answers_path, vocabulary_path, 
 
 
 
-def prepare_udc_data(data_dir, en_vocabulary_size, fr_vocabulary_size, tokenizer=basic_tokenizer):
+def prepare_data(data_dir, en_vocabulary_size, fr_vocabulary_size, dataset_type, tokenizer=basic_tokenizer):
     """Get UDC data into data_dir, create vocabularies and tokenize data.
 
     Args:
@@ -206,19 +207,33 @@ def prepare_udc_data(data_dir, en_vocabulary_size, fr_vocabulary_size, tokenizer
     """
 
     # Create vocabularies of the appropriate sizes.
+    train_path = os.path.join(data_dir, 'train.csv')
+    test_path = os.path.join(data_dir, 'test.csv')
+    train_dataset_reader, test_dataset_reader = getReadersByDatasetType(dataset_type)
     vocab_path = os.path.join(data_dir, "vocab%d.qa" % fr_vocabulary_size)
-    create_vocabulary(vocab_path, '/home/martin/data/udc/train.csv', fr_vocabulary_size, UDCDatasetReader(), tokenizer)
+    create_vocabulary(vocab_path, train_path, fr_vocabulary_size, train_dataset_reader, tokenizer)
 
     # Create token ids for the training data.
     question_train_ids_path = data_dir + ("question.ids%d.train" % fr_vocabulary_size)
     answer_train_ids_path = data_dir + ("answer.ids%d.train" % en_vocabulary_size)
     question_test_ids_path = data_dir + ("question.ids%d.test" % fr_vocabulary_size)
     answer_test_ids_path = data_dir + ("answer.ids%d.test" % en_vocabulary_size)
-    data_to_token_ids('/home/martin/data/udc/train.csv', question_train_ids_path, answer_train_ids_path, vocab_path, UDCDatasetReader(True),
+    data_to_token_ids(train_path, question_train_ids_path, answer_train_ids_path,
+                      vocab_path,
+                      train_dataset_reader,
                       tokenizer)
-    data_to_token_ids('/home/martin/data/udc/test.csv', question_test_ids_path, answer_test_ids_path, vocab_path, UDCDatasetReader(False),
+    data_to_token_ids(test_path, question_test_ids_path, answer_test_ids_path,
+                      vocab_path,
+                      test_dataset_reader,
                       tokenizer)
 
     return (question_train_ids_path, answer_train_ids_path,
             question_test_ids_path, answer_test_ids_path,
             vocab_path, vocab_path)
+
+def getReadersByDatasetType(dataset_type):
+    if (dataset_type == 'udc'):
+        return UDCDatasetReader(True), UDCDatasetReader(False)
+    else:
+        qlReader = QLDatasetReader()
+        return qlReader, qlReader

@@ -69,7 +69,7 @@ tf.app.flags.DEFINE_boolean("self_test", False,
                             "Run a self-test if this is set to True.")
 tf.app.flags.DEFINE_boolean("use_fp16", False,
                             "Train using fp16 instead of fp32.")
-
+tf.app.flags.DEFINE_string("dataset_type", "udc", "udc or ql")
 FLAGS = tf.app.flags.FLAGS
 
 # We use a number of buckets and pad to the closest one for efficiency.
@@ -141,9 +141,9 @@ def create_model(session, forward_only):
 
 
 def train():
-  print("Preparing UDC data in %s" % FLAGS.data_dir)
-  questions_train,fr_train, questions_dev, answers_dev, _, _ = data_utils_udc.prepare_udc_data(
-      FLAGS.data_dir, FLAGS.en_vocab_size, FLAGS.fr_vocab_size)
+  print("Preparing data in %s" % FLAGS.data_dir)
+  questions_train,fr_train, questions_dev, answers_dev, _, _ = data_utils_udc.prepare_data(
+      FLAGS.data_dir, FLAGS.en_vocab_size, FLAGS.fr_vocab_size, FLAGS.dataset_type)
   print("reading dictionaries")
   vocab_path = os.path.join(FLAGS.data_dir,
                                  "vocab%d.qa" % FLAGS.en_vocab_size)

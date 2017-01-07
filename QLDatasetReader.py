@@ -1,7 +1,7 @@
 from datasetReader import DatasetReader
 
 
-class UDCDatasetReader(DatasetReader):
+class QLDatasetReader(DatasetReader):
 
     def words(self, data_path, tokenizer):
         for line in open(data_path):
