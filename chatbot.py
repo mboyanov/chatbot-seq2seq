@@ -142,20 +142,17 @@ def create_model(session, forward_only):
 
 def train():
   print("Preparing UDC data in %s" % FLAGS.data_dir)
-  en_train, fr_train, en_dev, fr_dev, _, _ = data_utils_udc.prepare_udc_data(
+  questions_train,fr_train, questions_dev, answers_dev, _, _ = data_utils_udc.prepare_udc_data(
       FLAGS.data_dir, FLAGS.en_vocab_size, FLAGS.fr_vocab_size)
-  print("Reading test questions")
-  with open('testquestions.txt','r') as f:
-    sentences = f.readlines()
   print("reading dictionaries")
-  en_vocab_path = os.path.join(FLAGS.data_dir,
+  vocab_path = os.path.join(FLAGS.data_dir,
                                  "vocab%d.qa" % FLAGS.en_vocab_size)
-  en_vocab, rev_fr_vocab = data_utils_udc.initialize_vocabulary(en_vocab_path)
+  en_vocab, rev_vocab = data_utils_udc.initialize_vocabulary(vocab_path)
   # Read data into buckets and compute their sizes.
   print ("Reading development and training data (limit: %d)."
          % FLAGS.max_train_data_size)
-  dev_set = read_data(en_dev, fr_dev)
-  train_set = read_data(en_train, fr_train, FLAGS.max_train_data_size)
+  dev_set = read_data(questions_dev, answers_dev)
+  train_set = read_data(questions_train, fr_train, FLAGS.max_train_data_size)
   train_bucket_sizes = [len(train_set[b]) for b in xrange(len(_buckets))]
   train_total_size = float(sum(train_bucket_sizes))
 
@@ -182,8 +179,9 @@ def train():
 
       # Get a batch and make a step.
       start_time = time.time()
+      
       encoder_inputs, decoder_inputs, target_weights = model.get_batch(
-          train_set, bucket_id)
+         train_set, bucket_id)
       _, step_loss, _ = model.step(sess, encoder_inputs, decoder_inputs,
                                    target_weights, bucket_id, False)
       step_time += (time.time() - start_time) / FLAGS.steps_per_checkpoint
@@ -212,19 +210,30 @@ def train():
             continue
           encoder_inputs, decoder_inputs, target_weights = model.get_batch(
               dev_set, bucket_id)
-          _, eval_loss, _ = model.step(sess, encoder_inputs, decoder_inputs,
+          
+          _, eval_loss, outputs = model.step(sess, encoder_inputs, decoder_inputs,
                                        target_weights, bucket_id, True)
           eval_ppx = math.exp(float(eval_loss)) if eval_loss < 300 else float(
               "inf")
           print("  eval: bucket %d perplexity %.2f" % (bucket_id, eval_ppx))
-        with open('responseEvolution','a') as out:
-          out.write('Global step %d perplexity %.2f responses: +\n' % (model.global_step.eval(), perplexity))
-          for sentence in sentences:
-            response = evalSentence(sentence, model, en_vocab, rev_fr_vocab, sess)
-            print(sentence)
-            print(response)
-            out.write(sentence+"\n")
-            out.write( response+ "\n")
+          # if not dev:
+          #   continue
+          # with open('responseEvolution2','a') as out:
+          #   out.write('Global step %d perplexity %.2f responses: +\n' % (model.global_step.eval(), perplexity))
+          #   for i in range(5):
+          #     q = []
+          #     for t in range(_buckets[bucket_id][0]):
+          #       q.append(encoder_inputs[t][i])
+          #       print("Question" , q)
+          #     q = " ".join([tf.compat.as_str(rev_vocab[logit]) for logit in q])
+          #     out.write(q+"\n")
+          #     a = outputs
+          #     print(a)
+          #     print(len(a), len(a[0]), len(a[0][0]))
+          #     a = [int(np.argmax(logit, axis=1)) for logit in a]
+          #     a = " ".join([tf.compat.as_str(rev_vocab[logit]) for logit in a])
+          #     out.write(q+"\n")
+          #     out.write(a+ "\n")
         sys.stdout.flush()
 
 
@@ -253,8 +262,6 @@ def decode():
 def evalSentence(sentence, model, en_vocab, rev_fr_vocab, sess):
   # Get token-ids for the input sentence.
   token_ids = data_utils_udc.sentence_to_token_ids(sentence, en_vocab)
-  if 'buntu' in sentence:
-    print(token_ids)
   # Which bucket does it belong to?
   bucket_id = len(_buckets) - 1
   for i, bucket in enumerate(_buckets):
@@ -282,9 +289,7 @@ def evalSentence(sentence, model, en_vocab, rev_fr_vocab, sess):
   return " ".join([tf.compat.as_str(rev_fr_vocab[output]) for output in outputs])
 
 def main(_):
-  if FLAGS.self_test:
-    self_test()
-  elif FLAGS.decode:
+  if FLAGS.decode:
     decode()
   else:
     train()
