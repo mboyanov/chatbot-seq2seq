@@ -99,7 +99,7 @@ class Seq2SeqModel(object):
             w = tf.transpose(w_t)
             b = tf.get_variable("proj_b", [self.target_vocab_size], dtype=dtype)
             output_projection = (w, b)
-
+            self.output_projection = output_projection
             def sampled_loss(inputs, labels):
                 labels = tf.reshape(labels, [-1, 1])
                 # We need to compute the sampled_softmax_loss using 32bit floats to
@@ -171,6 +171,12 @@ class Seq2SeqModel(object):
                 self.target_weights, buckets,
                 lambda x, y: seq2seq_f(x, y, False),
                 softmax_loss_function=softmax_loss_function)
+            if output_projection is not None:
+                for b in xrange(len(buckets)):
+                    self.outputs[b] = [
+                        tf.matmul(output, output_projection[0]) + output_projection[1]
+                        for output in self.outputs[b]
+                        ]
 
         # Gradients and SGD update operation for training the model.
         params = tf.trainable_variables()

@@ -193,15 +193,16 @@ def train():
         # Print statistics for the previous epoch.
         perplexity = math.exp(float(loss)) if loss < 300 else float("inf")
         print ("global step %d learning rate %.4f step-time %.2f perplexity "
-               "%.2f" % (model.global_step.eval(), model.learning_rate.eval(),
-                         step_time, perplexity))
+               "%.2f loss %.2f" % (model.global_step.eval(), model.learning_rate.eval(),
+                         step_time, perplexity, loss))
         # Decrease learning rate if no improvement was seen over last 3 times.
         if len(previous_losses) > 2 and loss > max(previous_losses[-3:]):
           sess.run(model.learning_rate_decay_op)
         previous_losses.append(loss)
         # Save checkpoint and zero timer and loss.
         checkpoint_path = os.path.join(FLAGS.train_dir, "translate.ckpt")
-        model.saver.save(sess, checkpoint_path, global_step=model.global_step)
+        if current_step % (5 * FLAGS.steps_per_checkpoint) == 0:
+            model.saver.save(sess, checkpoint_path, global_step=model.global_step)
         step_time, loss = 0.0, 0.0
         # Run evals on development set and print their perplexity.
         for bucket_id in xrange(len(_buckets)):
@@ -216,24 +217,30 @@ def train():
           eval_ppx = math.exp(float(eval_loss)) if eval_loss < 300 else float(
               "inf")
           print("  eval: bucket %d perplexity %.2f" % (bucket_id, eval_ppx))
-          # if not dev:
-          #   continue
-          # with open('responseEvolution2','a') as out:
-          #   out.write('Global step %d perplexity %.2f responses: +\n' % (model.global_step.eval(), perplexity))
-          #   for i in range(5):
-          #     q = []
-          #     for t in range(_buckets[bucket_id][0]):
-          #       q.append(encoder_inputs[t][i])
-          #       print("Question" , q)
-          #     q = " ".join([tf.compat.as_str(rev_vocab[logit]) for logit in q])
-          #     out.write(q+"\n")
-          #     a = outputs
-          #     print(a)
-          #     print(len(a), len(a[0]), len(a[0][0]))
-          #     a = [int(np.argmax(logit, axis=1)) for logit in a]
-          #     a = " ".join([tf.compat.as_str(rev_vocab[logit]) for logit in a])
-          #     out.write(q+"\n")
-          #     out.write(a+ "\n")
+          with open(os.path.join(FLAGS.data_dir,'evolution/responseEvolution-%d' % (model.global_step.eval())) ,'w') as out:
+            out.write('Global step %d perplexity %.2f responses: +\n' % (model.global_step.eval(), perplexity))
+            vocab_outcomes = set()
+            vocab_expected = set()
+            outcomes_T = np.array([np.argmax(logit, axis=1) for logit in outputs]).T
+            inputs_T = np.array(encoder_inputs).T
+            expected_T = np.array(decoder_inputs).T
+            for ex in range(len(outcomes_T)):
+              ut = [rev_vocab[w] for w in inputs_T[ex] if w != 0]
+              ut.reverse()
+              current_outcome = outcomes_T[ex].tolist()
+              if data_utils_udc.EOS_ID in current_outcome:
+                current_outcome = current_outcome[:current_outcome.index(data_utils_udc.EOS_ID)]
+              response = [rev_vocab[w] for w in current_outcome if w != 0]
+              expected = [rev_vocab[w] for w in expected_T[ex] if w != 0]
+              vocab_outcomes = vocab_outcomes.union(set(response))
+              vocab_expected = vocab_expected.union(set(expected))
+              out.write("\t".join(["Utterance:", " ".join(ut)]) + "\n")
+              out.write("\t".join(["Response:", " ".join(response)]) + "\n")
+              out.write("\t".join(["Expected:", " ".join(expected)]) + "\n")
+            print("  vocab_outcomes size: %d vocab_expected size %d overlap size: %d" % (len(vocab_outcomes), len(vocab_expected), len(vocab_outcomes.intersection(vocab_expected))))
+            out.write("  vocab_outcomes size: %d vocab_expected size %d overlap size: %d" % (
+              len(vocab_outcomes), len(vocab_expected), len(vocab_outcomes.intersection(vocab_expected))))
+
         sys.stdout.flush()
 
 
