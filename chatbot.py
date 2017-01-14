@@ -41,7 +41,7 @@ import logging
 import numpy as np
 from six.moves import xrange  # pylint: disable=redefined-builtin
 import tensorflow as tf
-
+from nltk.translate import bleu
 import data_utils_udc
 import seq2seq_model
 
@@ -221,6 +221,7 @@ def train():
             out.write('Global step %d perplexity %.2f responses: +\n' % (model.global_step.eval(), perplexity))
             vocab_outcomes = set()
             vocab_expected = set()
+            bleu_score = 0.0
             outcomes_T = np.array([np.argmax(logit, axis=1) for logit in outputs]).T
             inputs_T = np.array(encoder_inputs).T
             expected_T = np.array(decoder_inputs).T
@@ -232,15 +233,19 @@ def train():
                 current_outcome = current_outcome[:current_outcome.index(data_utils_udc.EOS_ID)]
               response = [rev_vocab[w] for w in current_outcome if w != 0]
               expected = [rev_vocab[w] for w in expected_T[ex] if w != 0]
+              try:
+                  bleu_score += bleu([expected[1:-1]], response,[1])
+              except:
+                  print("Error computing BLEU", expected[1:-1], response)
               vocab_outcomes = vocab_outcomes.union(set(response))
               vocab_expected = vocab_expected.union(set(expected))
               out.write("\t".join(["Utterance:", " ".join(ut)]) + "\n")
               out.write("\t".join(["Response:", " ".join(response)]) + "\n")
               out.write("\t".join(["Expected:", " ".join(expected)]) + "\n")
-            print("  vocab_outcomes size: %d vocab_expected size %d overlap size: %d" % (len(vocab_outcomes), len(vocab_expected), len(vocab_outcomes.intersection(vocab_expected))))
-            out.write("  vocab_outcomes size: %d vocab_expected size %d overlap size: %d" % (
-              len(vocab_outcomes), len(vocab_expected), len(vocab_outcomes.intersection(vocab_expected))))
-
+            print("  vocab_outcomes size: %d vocab_expected size %d overlap size: %d BLEU: %.2f" %
+                  (len(vocab_outcomes), len(vocab_expected), len(vocab_outcomes.intersection(vocab_expected)), bleu_score/len(outcomes_T)))
+            out.write("  vocab_outcomes size: %d vocab_expected size %d overlap size: %d BLEU: %.2f" %
+                  (len(vocab_outcomes), len(vocab_expected), len(vocab_outcomes.intersection(vocab_expected)), bleu_score/len(outcomes_T)))
         sys.stdout.flush()
 
 
@@ -295,11 +300,16 @@ def evalSentence(sentence, model, en_vocab, rev_fr_vocab, sess):
   # Print out French sentence corresponding to outputs.
   return " ".join([tf.compat.as_str(rev_fr_vocab[output]) for output in outputs])
 
+
 def main(_):
   if FLAGS.decode:
     decode()
   else:
     train()
+
+
+
+
 
 if __name__ == "__main__":
   tf.app.run()
