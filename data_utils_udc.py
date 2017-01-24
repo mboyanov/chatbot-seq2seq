@@ -24,7 +24,8 @@ import re
 from tensorflow.python.platform import gfile
 from collections import defaultdict
 from UDCDatasetReader import UDCDatasetReader
-from QLDatasetReader import QLDatasetReader
+from QLDatasetReader import QLDatasetReader, FilteredDatasetReader
+from sklearn.feature_extraction.text import TfidfVectorizer
 
 # Special vocabulary symbols - we always put them at the start.
 _PAD = b"_PAD"
@@ -186,54 +187,60 @@ def data_to_token_ids(data_path, questions_path, answers_path, vocabulary_path, 
 
 
 
-def prepare_data(data_dir, en_vocabulary_size, fr_vocabulary_size, dataset_type, tokenizer=basic_tokenizer):
+def prepare_data(data_dir, vocabulary_size, dataset_type, tokenizer=basic_tokenizer):
     """Get UDC data into data_dir, create vocabularies and tokenize data.
 
     Args:
       data_dir: directory in which the data sets will be stored.
-      en_vocabulary_size: size of the English vocabulary to create and use.
-      fr_vocabulary_size: size of the French vocabulary to create and use.
+      vocabulary_size: size of the English vocabulary to create and use.
       tokenizer: a function to use to tokenize each data sentence;
         if None, basic_tokenizer will be used.
 
     Returns:
       A tuple of 6 elements:
-        (1) path to the token-ids for English training data-set,
-        (2) path to the token-ids for French training data-set,
-        (3) path to the token-ids for English development data-set,
-        (4) path to the token-ids for French development data-set,
+        (1) path to the token-ids for questions training data-set,
+        (2) path to the token-ids for answers training data-set,
+        (3) path to the token-ids for questions development data-set,
+        (4) path to the token-ids for answers development data-set,
         (5) path to the English vocabulary file,
         (6) path to the French vocabulary file.
     """
 
     # Create vocabularies of the appropriate sizes.
     train_path = os.path.join(data_dir, 'train.csv')
-    test_path = os.path.join(data_dir, 'test.csv')
     train_dataset_reader, test_dataset_reader = getReadersByDatasetType(dataset_type)
-    vocab_path = os.path.join(data_dir, "vocab%d.qa" % fr_vocabulary_size)
-    create_vocabulary(vocab_path, train_path, fr_vocabulary_size, train_dataset_reader, tokenizer)
+    vocab_path = os.path.join(data_dir, "vocab%d.qa" % vocabulary_size)
+    create_vocabulary(vocab_path, train_path, vocabulary_size, train_dataset_reader, tokenizer)
 
-    # Create token ids for the training data.
-    question_train_ids_path = data_dir + ("question.ids%d.train" % fr_vocabulary_size)
-    answer_train_ids_path = data_dir + ("answer.ids%d.train" % en_vocabulary_size)
-    question_test_ids_path = data_dir + ("question.ids%d.test" % fr_vocabulary_size)
-    answer_test_ids_path = data_dir + ("answer.ids%d.test" % en_vocabulary_size)
-    data_to_token_ids(train_path, question_train_ids_path, answer_train_ids_path,
-                      vocab_path,
-                      train_dataset_reader,
-                      tokenizer)
-    data_to_token_ids(test_path, question_test_ids_path, answer_test_ids_path,
-                      vocab_path,
-                      test_dataset_reader,
-                      tokenizer)
+    paths = []
+    for (ds, reader) in [('train', train_dataset_reader), ('test', test_dataset_reader), ('validation', test_dataset_reader)]:
+        path = os.path.join(data_dir, '%s.csv' % ds)
+        question_ids_path = data_dir + ("question.ids%d.%s" % (vocabulary_size, ds))
+        answer_ids_path = data_dir + ("answer.ids%d.%s" % (vocabulary_size, ds))
+        paths.append(question_ids_path)
+        paths.append(answer_ids_path)
+        data_to_token_ids(path, question_ids_path, answer_ids_path,
+                          vocab_path,
+                          reader,
+                          tokenizer)
+    paths.append(vocab_path)
+    return paths
 
-    return (question_train_ids_path, answer_train_ids_path,
-            question_test_ids_path, answer_test_ids_path,
-            vocab_path, vocab_path)
+def tfidfVectorizer(data_dir, vocab, dataset_type, tokenizer=basic_tokenizer):
+    train_path = os.path.join(data_dir, 'train.csv')
+    train_dataset_reader, _ = getReadersByDatasetType(dataset_type)
+    answers = []
+    for (q, a) in train_dataset_reader.conversations(train_path, tokenizer):
+        answers.append(a)
+    vectorizer = TfidfVectorizer(vocabulary=vocab, tokenizer=tokenizer)
+    vectorizer.fit_transform(answers)
+    return vectorizer
+
 
 def getReadersByDatasetType(dataset_type):
     if (dataset_type == 'udc'):
         return UDCDatasetReader(True), UDCDatasetReader(False)
     else:
+        filteredReader = FilteredDatasetReader()
         qlReader = QLDatasetReader()
-        return qlReader, qlReader
+        return filteredReader, qlReader

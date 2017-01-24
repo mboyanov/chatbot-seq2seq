@@ -44,6 +44,9 @@ import tensorflow as tf
 from nltk.translate import bleu
 import data_utils_udc
 import seq2seq_model
+import QLXMLReaderPy
+from sklearn.metrics.pairwise import cosine_distances
+
 
 
 tf.app.flags.DEFINE_float("learning_rate", 0.5, "Learning rate.")
@@ -56,7 +59,6 @@ tf.app.flags.DEFINE_integer("batch_size", 64,
 tf.app.flags.DEFINE_integer("size", 1024, "Size of each model layer.")
 tf.app.flags.DEFINE_integer("num_layers", 3, "Number of layers in the model.")
 tf.app.flags.DEFINE_integer("en_vocab_size", 40000, "English vocabulary size.")
-tf.app.flags.DEFINE_integer("fr_vocab_size", 40000, "French vocabulary size.")
 tf.app.flags.DEFINE_string("data_dir", "/tmp", "Data directory")
 tf.app.flags.DEFINE_string("train_dir", "/tmp", "Training directory.")
 tf.app.flags.DEFINE_integer("max_train_data_size", 0,
@@ -65,6 +67,8 @@ tf.app.flags.DEFINE_integer("steps_per_checkpoint", 200,
                             "How many training steps to do per checkpoint.")
 tf.app.flags.DEFINE_boolean("decode", False,
                             "Set to True for interactive decoding.")
+tf.app.flags.DEFINE_boolean("eval", False,
+                            "Set to True for evaluation")
 tf.app.flags.DEFINE_boolean("self_test", False,
                             "Run a self-test if this is set to True.")
 tf.app.flags.DEFINE_boolean("use_fp16", False,
@@ -120,7 +124,6 @@ def create_model(session, forward_only):
   dtype = tf.float16 if FLAGS.use_fp16 else tf.float32
   model = seq2seq_model.Seq2SeqModel(
       FLAGS.en_vocab_size,
-      FLAGS.fr_vocab_size,
       _buckets,
       FLAGS.size,
       FLAGS.num_layers,
@@ -142,17 +145,17 @@ def create_model(session, forward_only):
 
 def train():
   print("Preparing data in %s" % FLAGS.data_dir)
-  questions_train,fr_train, questions_dev, answers_dev, _, _ = data_utils_udc.prepare_data(
-      FLAGS.data_dir, FLAGS.en_vocab_size, FLAGS.fr_vocab_size, FLAGS.dataset_type)
+  questions_train, answers_train, questions_dev, answers_dev, _, _, _,  = data_utils_udc.prepare_data(
+      FLAGS.data_dir, FLAGS.en_vocab_size, FLAGS.dataset_type)
   print("reading dictionaries")
   vocab_path = os.path.join(FLAGS.data_dir,
                                  "vocab%d.qa" % FLAGS.en_vocab_size)
-  en_vocab, rev_vocab = data_utils_udc.initialize_vocabulary(vocab_path)
+  vocab, rev_vocab = data_utils_udc.initialize_vocabulary(vocab_path)
   # Read data into buckets and compute their sizes.
   print ("Reading development and training data (limit: %d)."
          % FLAGS.max_train_data_size)
   dev_set = read_data(questions_dev, answers_dev)
-  train_set = read_data(questions_train, fr_train, FLAGS.max_train_data_size)
+  train_set = read_data(questions_train, answers_train, FLAGS.max_train_data_size)
   train_bucket_sizes = [len(train_set[b]) for b in xrange(len(_buckets))]
   train_total_size = float(sum(train_bucket_sizes))
 
@@ -161,6 +164,8 @@ def train():
   # the size if i-th training bucket, as used later.
   train_buckets_scale = [sum(train_bucket_sizes[:i + 1]) / train_total_size
                          for i in xrange(len(train_bucket_sizes))]
+  vectorizer = data_utils_udc.tfidfVectorizer(FLAGS.data_dir, vocab, FLAGS.dataset_type)
+
   with tf.Session() as sess:
     # Create model.
     print("Creating %d layers of %d units." % (FLAGS.num_layers, FLAGS.size))
@@ -192,9 +197,11 @@ def train():
       if current_step % FLAGS.steps_per_checkpoint == 0:
         # Print statistics for the previous epoch.
         perplexity = math.exp(float(loss)) if loss < 300 else float("inf")
-        print ("global step %d learning rate %.4f step-time %.2f perplexity "
-               "%.2f loss %.2f" % (model.global_step.eval(), model.learning_rate.eval(),
-                         step_time, perplexity, loss))
+        MAP = evaluateMAPParameterized(sess, model, vocab, rev_vocab, vectorizer)
+
+        print("global step %d learning rate %.4f step-time %.2f perplexity "
+               "%.2f loss %.2f %.4f" % (model.global_step.eval(), model.learning_rate.eval(),
+                         step_time, perplexity, loss, MAP))
         # Decrease learning rate if no improvement was seen over last 3 times.
         if len(previous_losses) > 2 and loss > max(previous_losses[-3:]):
           sess.run(model.learning_rate_decay_op)
@@ -211,13 +218,15 @@ def train():
             continue
           encoder_inputs, decoder_inputs, target_weights = model.get_batch(
               dev_set, bucket_id)
-          
+
           _, eval_loss, outputs = model.step(sess, encoder_inputs, decoder_inputs,
-                                       target_weights, bucket_id, True)
+                                             target_weights, bucket_id, True)
           eval_ppx = math.exp(float(eval_loss)) if eval_loss < 300 else float(
               "inf")
           print("  eval: bucket %d perplexity %.2f" % (bucket_id, eval_ppx))
-          with open(os.path.join(FLAGS.data_dir,'evolution/responseEvolution-%d' % (model.global_step.eval())) ,'w') as out:
+          total_bleu = 0.0
+          total_docs = 0
+          with open(os.path.join(FLAGS.data_dir,'evolution/responseEvolution-%d' % (model.global_step.eval())), 'w') as out:
             out.write('Global step %d perplexity %.2f responses: +\n' % (model.global_step.eval(), perplexity))
             vocab_outcomes = set()
             vocab_expected = set()
@@ -234,7 +243,7 @@ def train():
               response = [rev_vocab[w] for w in current_outcome if w != 0]
               expected = [rev_vocab[w] for w in expected_T[ex] if w != 0]
               try:
-                  bleu_score += bleu([expected[1:-1]], response,[1])
+                  bleu_score += bleu([expected[1:-1]], response, [1])
               except:
                   print("Error computing BLEU", expected[1:-1], response)
               vocab_outcomes = vocab_outcomes.union(set(response))
@@ -246,6 +255,12 @@ def train():
                   (len(vocab_outcomes), len(vocab_expected), len(vocab_outcomes.intersection(vocab_expected)), bleu_score/len(outcomes_T)))
             out.write("  vocab_outcomes size: %d vocab_expected size %d overlap size: %d BLEU: %.2f" %
                   (len(vocab_outcomes), len(vocab_expected), len(vocab_outcomes.intersection(vocab_expected)), bleu_score/len(outcomes_T)))
+            total_bleu += bleu_score
+            total_docs += len(outcomes_T)
+        with open('evolution/scoreEvolution', 'a') as out:
+            print("  step: %d perplexity: %.4f MAP: %.4f BLEU: %.4f" %
+                  (model.global_step.eval(), perplexity, MAP, total_bleu/total_docs))
+            out.write("\t".join(str(x) for x in [model.global_step.eval(), perplexity, MAP, total_bleu / total_docs]))
         sys.stdout.flush()
 
 
@@ -254,22 +269,26 @@ def decode():
     # Create model and load parameters.
     model = create_model(sess, True)
     model.batch_size = 1  # We decode one sentence at a time.
-
-    # Load vocabularies.
-    en_vocab_path = os.path.join(FLAGS.data_dir,
-                                 "vocab%d.qa" % FLAGS.en_vocab_size)
-    en_vocab, rev_fr_vocab = data_utils_udc.initialize_vocabulary(en_vocab_path)
+    vocab, rev_vocab = getVocabularies()
 
     # Decode from standard input.
     sys.stdout.write("> ")
     sys.stdout.flush()
     sentence = sys.stdin.readline()
     while sentence:
-      response = evalSentence(sentence, model, en_vocab, rev_fr_vocab, sess)
+      response = evalSentence(sentence, model, vocab, rev_vocab, sess)
       print(response)
       print("> ", end="")
       sys.stdout.flush()
       sentence = sys.stdin.readline()
+
+
+def getVocabularies():
+    # Load vocabularies.
+    vocab_path = os.path.join(FLAGS.data_dir,
+                              "vocab%d.qa" % FLAGS.en_vocab_size)
+    return data_utils_udc.initialize_vocabulary(vocab_path)
+
 
 def evalSentence(sentence, model, en_vocab, rev_fr_vocab, sess):
   # Get token-ids for the input sentence.
@@ -301,9 +320,49 @@ def evalSentence(sentence, model, en_vocab, rev_fr_vocab, sess):
   return " ".join([tf.compat.as_str(rev_fr_vocab[output]) for output in outputs])
 
 
+def evaluateMAP():
+    vocab, rev_vocab = getVocabularies()
+    vectorizer = data_utils_udc.tfidfVectorizer(FLAGS.data_dir, vocab, FLAGS.dataset_type)
+
+    with tf.Session() as sess:
+        # Create model and load parameters.
+        model = create_model(sess, True)
+        model.batch_size = 1  # We decode one sentence at a time.
+        return evaluateMAPParameterized(sess, model, vocab, rev_vocab, vectorizer)
+
+
+def evaluateMAPParameterized(sess, model, vocab, rev_vocab, vectorizer):
+    meanAvgPrecision = 0
+    totalQueries = 0
+    for (q, answers) in QLXMLReaderPy.read(
+            "/home/martin/data/qatarliving/dev/SemEval2016-Task3-CQA-QL-dev-subtaskA-with-multiline.xml"):
+        answers_transformed = vectorizer.transform([a[0] for a in answers])
+        correct = [a[1] for a in answers]
+        response = evalSentence(q, model, vocab, rev_vocab, sess)
+        response_transformed = vectorizer.transform([response])
+        distances = cosine_distances(response_transformed, answers_transformed)
+        results = list(zip(distances[0], correct))
+        results.sort()
+        relevant_docs = 0
+        score = 0.0
+        for i, r in enumerate(results):
+            if r[1]:
+                relevant_docs += 1
+                score += relevant_docs / (i + 1)
+        if relevant_docs > 0:
+            score = score / relevant_docs
+            meanAvgPrecision += score
+            totalQueries += 1
+    meanAvgPrecision /= totalQueries
+    print("MAP:", meanAvgPrecision)
+    return meanAvgPrecision
+
+
 def main(_):
   if FLAGS.decode:
     decode()
+  elif FLAGS.eval:
+    evaluateMAP()
   else:
     train()
 
