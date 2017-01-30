@@ -257,6 +257,15 @@ def train():
                   (len(vocab_outcomes), len(vocab_expected), len(vocab_outcomes.intersection(vocab_expected)), bleu_score/len(outcomes_T)))
             total_bleu += bleu_score
             total_docs += len(outcomes_T)
+        BLEU = total_bleu / total_docs
+        if MAP > model.best_map.eval():
+            print("MAP increased from %.2f to %.2f" % (model.best_map.eval(), MAP))
+            sess.run(model.best_map.assign(MAP))
+            model.map_saver.save(sess, FLAGS.train_dir+"/best-map/", global_step=model.global_step.eval())
+        if BLEU > model.best_bleu.eval():
+            print("BLEU increased from %.2f to %.2f" % (model.best_bleu.eval(), BLEU))
+            sess.run(model.best_bleu.assign(BLEU))
+            model.map_saver.save(sess, FLAGS.train_dir+"/best-bleu/", global_step=model.global_step.eval())
         with open('evolution/scoreEvolution', 'a') as out:
             print("  step: %d perplexity: %.4f MAP: %.4f BLEU: %.4f" %
                   (model.global_step.eval(), perplexity, MAP, total_bleu/total_docs))
@@ -264,23 +273,16 @@ def train():
         sys.stdout.flush()
 
 
-def decode():
-  with tf.Session() as sess:
+def decode(sess):
     # Create model and load parameters.
     model = create_model(sess, True)
     model.batch_size = 1  # We decode one sentence at a time.
     vocab, rev_vocab = getVocabularies()
 
-    # Decode from standard input.
-    sys.stdout.write("> ")
-    sys.stdout.flush()
-    sentence = sys.stdin.readline()
-    while sentence:
-      response = evalSentence(sentence, model, vocab, rev_vocab, sess)
-      print(response)
-      print("> ", end="")
-      sys.stdout.flush()
-      sentence = sys.stdin.readline()
+    def responder(sentence):
+        return evalSentence(sentence,model, vocab, rev_vocab, sess)
+    return responder
+
 
 
 def getVocabularies():
@@ -293,6 +295,8 @@ def getVocabularies():
 def evalSentence(sentence, model, en_vocab, rev_fr_vocab, sess):
   # Get token-ids for the input sentence.
   token_ids = data_utils_udc.sentence_to_token_ids(sentence, en_vocab)
+  if (token_ids is None):
+      return ""
   # Which bucket does it belong to?
   bucket_id = len(_buckets) - 1
   for i, bucket in enumerate(_buckets):
@@ -360,7 +364,18 @@ def evaluateMAPParameterized(sess, model, vocab, rev_vocab, vectorizer):
 
 def main(_):
   if FLAGS.decode:
-    decode()
+      with tf.Session() as sess:
+          responder = decode(sess)
+          # Decode from standard input.
+          sys.stdout.write("> ")
+          sys.stdout.flush()
+          sentence = sys.stdin.readline()
+          while sentence:
+              response = responder(sentence)
+              print(response)
+              print("> ", end="")
+              sys.stdout.flush()
+              sentence = sys.stdin.readline()
   elif FLAGS.eval:
     evaluateMAP()
   else:

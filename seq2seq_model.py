@@ -88,6 +88,8 @@ class Seq2SeqModel(object):
         self.learning_rate_decay_op = self.learning_rate.assign(
             self.learning_rate * learning_rate_decay_factor)
         self.global_step = tf.Variable(0, trainable=False)
+        self.best_map = tf.Variable(0, trainable=False, dtype=tf.float32)
+        self.best_bleu = tf.Variable(0, trainable=False, dtype=tf.float32)
 
         # If we use sampled softmax, we need an output projection.
         output_projection = None
@@ -192,6 +194,8 @@ class Seq2SeqModel(object):
                     zip(clipped_gradients, params), global_step=self.global_step))
 
         self.saver = tf.train.Saver(tf.all_variables())
+        self.map_saver = tf.train.Saver(tf.all_variables())
+        self.bleu_saver = tf.train.Saver(tf.all_variables())
 
     def step(self, session, encoder_inputs, decoder_inputs, target_weights,
              bucket_id, forward_only):
