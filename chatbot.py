@@ -266,10 +266,10 @@ def train():
             print("BLEU increased from %.2f to %.2f" % (model.best_bleu.eval(), BLEU))
             sess.run(model.best_bleu.assign(BLEU))
             model.map_saver.save(sess, FLAGS.train_dir+"/best-bleu/", global_step=model.global_step.eval())
-        with open('evolution/scoreEvolution', 'a') as out:
+        with open(os.path.join(FLAGS.train_dir, 'scoreEvolution'), 'a') as out:
             print("  step: %d perplexity: %.4f MAP: %.4f BLEU: %.4f" %
                   (model.global_step.eval(), perplexity, MAP, total_bleu/total_docs))
-            out.write("\t".join(str(x) for x in [model.global_step.eval(), perplexity, MAP, total_bleu / total_docs]))
+            out.write("\t".join(str(x) for x in [model.global_step.eval(), perplexity, MAP, total_bleu / total_docs])+ "\n")
         sys.stdout.flush()
 
 
@@ -336,30 +336,42 @@ def evaluateMAP():
 
 
 def evaluateMAPParameterized(sess, model, vocab, rev_vocab, vectorizer):
-    meanAvgPrecision = 0
+    meanAvgPrecision = 0.0
+    meanAvgPrecisionQ = 0.0
     totalQueries = 0
     for (q, answers) in QLXMLReaderPy.read(
             "/home/martin/data/qatarliving/dev/SemEval2016-Task3-CQA-QL-dev-subtaskA-with-multiline.xml"):
         answers_transformed = vectorizer.transform([a[0] for a in answers])
         correct = [a[1] for a in answers]
+        if sum(correct) == 0:
+            continue
         response = evalSentence(q, model, vocab, rev_vocab, sess)
         response_transformed = vectorizer.transform([response])
-        distances = cosine_distances(response_transformed, answers_transformed)
-        results = list(zip(distances[0], correct))
-        results.sort()
-        relevant_docs = 0
-        score = 0.0
-        for i, r in enumerate(results):
-            if r[1]:
-                relevant_docs += 1
-                score += relevant_docs / (i + 1)
-        if relevant_docs > 0:
-            score = score / relevant_docs
-            meanAvgPrecision += score
-            totalQueries += 1
+        score = calculateMAP(answers_transformed, correct, response_transformed)
+        question_transformed = vectorizer.transform([q])
+        score_q = calculateMAP(answers_transformed, correct, question_transformed)
+        meanAvgPrecision += score
+        meanAvgPrecisionQ += score_q
+        totalQueries += 1
     meanAvgPrecision /= totalQueries
+    meanAvgPrecisionQ /= totalQueries
     print("MAP:", meanAvgPrecision)
+    print("MAP Question:", meanAvgPrecisionQ)
     return meanAvgPrecision
+
+
+def calculateMAP(answers_transformed, correct, response_transformed):
+    distances = cosine_distances(response_transformed, answers_transformed)
+    results = list(zip(distances[0], correct))
+    results.sort()
+    relevant_docs = 0
+    score = 0.0
+    for i, r in enumerate(results):
+        if r[1]:
+            relevant_docs += 1
+            score += relevant_docs / (i + 1)
+    score = score / relevant_docs
+    return score
 
 
 def main(_):
