@@ -26,6 +26,8 @@ from collections import defaultdict
 from UDCDatasetReader import UDCDatasetReader
 from QLDatasetReader import QLDatasetReader, FilteredDatasetReader
 from sklearn.feature_extraction.text import TfidfVectorizer
+import numpy as np
+from tokenizer import tokenizer as default_tokenizer
 
 # Special vocabulary symbols - we always put them at the start.
 _PAD = b"_PAD"
@@ -40,24 +42,14 @@ EOS_ID = 2
 UNK_ID = 3
 
 # Regular expressions used to tokenize.
-_WORD_SPLIT = re.compile("([.,!?\"':;)(])")
 _DIGIT_RE = re.compile(r"\d")
 _DIGIT_RE_B = re.compile(br"\d")
 
 
-def basic_tokenizer(sentence):
-    """Very basic tokenizer: split the sentence into a list of tokens."""
-    words = []
-    for space_separated_fragment in sentence.strip().split():
-        if type(space_separated_fragment) == 'str':
-            words.extend(re.split("([.,!?\"':;)(])", space_separated_fragment))
-        else:
-            words.extend(re.split("([.,!?\"':;)(])", space_separated_fragment))
-    return [w for w in words if w]
 
 
 def create_vocabulary(vocabulary_path, data_path, max_vocabulary_size, dataset_reader,
-                      tokenizer=basic_tokenizer, normalize_digits=True):
+                      tokenizer=default_tokenizer, normalize_digits=True):
     """Create vocabulary file (if it does not exist yet) from data file.
 
     Data file is assumed to contain one sentence per line. Each sentence is
@@ -72,7 +64,6 @@ def create_vocabulary(vocabulary_path, data_path, max_vocabulary_size, dataset_r
       max_vocabulary_size: limit on the size of the created vocabulary.
       dataset_reader: used to read the dataset
       tokenizer: a function to use to tokenize each data sentence;
-        if None, basic_tokenizer will be used.
       normalize_digits: Boolean; if true, all digits are replaced by 0s.
     """
     if not gfile.Exists(vocabulary_path):
@@ -122,7 +113,7 @@ def initialize_vocabulary(vocabulary_path):
 
 
 def sentence_to_token_ids(sentence, vocabulary,
-                          tokenizer=None, normalize_digits=True):
+                          tokenizer=default_tokenizer, normalize_digits=True):
     """Convert a string to list of integers representing token-ids.
 
     For example, a sentence "I have a dog" may become tokenized into
@@ -140,10 +131,7 @@ def sentence_to_token_ids(sentence, vocabulary,
       a list of integers, the token-ids for the sentence.
     """
 
-    if tokenizer:
-        words = tokenizer(sentence)
-    else:
-        words = basic_tokenizer(sentence)
+    words = tokenizer(sentence)
     if not normalize_digits:
         return [vocabulary.get(w, UNK_ID) for w in words]
     # Normalize digits by 0 before looking words up in the vocabulary.
@@ -156,7 +144,7 @@ def sentence_to_token_ids(sentence, vocabulary,
 
 
 def data_to_token_ids(data_path, questions_path, answers_path, vocabulary_path, dataset_reader,
-                      tokenizer=basic_tokenizer, normalize_digits=True):
+                      tokenizer=default_tokenizer, normalize_digits=True):
     """Tokenize data file and turn into token-ids using given vocabulary file.
 
     This function loads data line-by-line from data_path, calls the above
@@ -168,7 +156,6 @@ def data_to_token_ids(data_path, questions_path, answers_path, vocabulary_path, 
       target_path: path where the file with token-ids will be created.
       vocabulary_path: path to the vocabulary file.
       tokenizer: a function to use to tokenize each sentence;
-        if None, basic_tokenizer will be used.
       normalize_digits: Boolean; if true, all digits are replaced by 0s.
     """
     if gfile.Exists(questions_path) and gfile.Exists(answers_path):
@@ -176,18 +163,23 @@ def data_to_token_ids(data_path, questions_path, answers_path, vocabulary_path, 
         return
     print("Tokenizing data in %s" % data_path)
     vocab, _ = initialize_vocabulary(vocabulary_path)
+    lengths_q = []
+    lengths_a = []
     with gfile.GFile(questions_path, mode="w") as questions_tokens_file:
         with gfile.GFile(answers_path, mode="w") as answers_tokens_file:
             for q, a in dataset_reader.conversations(data_path, tokenizer):
                 token_ids = sentence_to_token_ids(q, vocab, tokenizer, normalize_digits)
                 token_ids_answer = sentence_to_token_ids(a, vocab, tokenizer, normalize_digits)
                 if (token_ids is not None and token_ids_answer is not None):
+                    lengths_q.append(len(token_ids))
+                    lengths_a.append(len(token_ids_answer))
                     questions_tokens_file.write(" ".join([str(tok) for tok in token_ids]) + "\n")
                     answers_tokens_file.write(" ".join([str(tok) for tok in token_ids_answer]) + "\n")
+    print(questions_path, 'stats', np.mean(lengths_q), np.std(lengths_q))
+    print(answers_path, 'stats', np.mean(lengths_a), np.std(lengths_a))
 
 
-
-def prepare_data(data_dir, vocabulary_size, dataset_type, tokenizer=basic_tokenizer):
+def prepare_data(data_dir, vocabulary_size, dataset_type, tokenizer=default_tokenizer):
     """Get UDC data into data_dir, create vocabularies and tokenize data.
 
     Args:
@@ -226,7 +218,7 @@ def prepare_data(data_dir, vocabulary_size, dataset_type, tokenizer=basic_tokeni
     paths.append(vocab_path)
     return paths
 
-def tfidfVectorizer(data_dir, vocab, dataset_type, tokenizer=basic_tokenizer):
+def tfidfVectorizer(data_dir, vocab, dataset_type, tokenizer=default_tokenizer):
     train_path = os.path.join(data_dir, 'train.csv')
     train_dataset_reader, _ = getReadersByDatasetType(dataset_type)
     answers = []
@@ -241,6 +233,6 @@ def getReadersByDatasetType(dataset_type):
     if (dataset_type == 'udc'):
         return UDCDatasetReader(True), UDCDatasetReader(False)
     else:
-        filteredReader = FilteredDatasetReader()
+        #filteredReader = FilteredDatasetReader()
         qlReader = QLDatasetReader()
-        return filteredReader, qlReader
+        return qlReader, qlReader

@@ -31,23 +31,24 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import logging
 import math
 import os
-import random
 import sys
 import time
-import logging
 
 import numpy as np
-from six.moves import xrange  # pylint: disable=redefined-builtin
 import tensorflow as tf
-from nltk.translate import bleu
-import data_utils_udc
-import seq2seq_model
+from six.moves import xrange  # pylint: disable=redefined-builtin
+
 import QLXMLReaderPy
-from sklearn.metrics.pairwise import cosine_distances
-
-
+import data_utils_udc
+import explorer
+import seq2seq_model
+from evaluators.bleu_evaluator import BLEUEvaluator
+from evaluators.map_evaluator import MAPEvaluator
+from evaluators.persister_evaluator import PersisterEvaluator
+from evaluators.vocabulary_evaluator import VocabularyEvaluator
 
 tf.app.flags.DEFINE_float("learning_rate", 0.5, "Learning rate.")
 tf.app.flags.DEFINE_float("learning_rate_decay_factor", 0.99,
@@ -69,8 +70,8 @@ tf.app.flags.DEFINE_boolean("decode", False,
                             "Set to True for interactive decoding.")
 tf.app.flags.DEFINE_boolean("eval", False,
                             "Set to True for evaluation")
-tf.app.flags.DEFINE_boolean("self_test", False,
-                            "Run a self-test if this is set to True.")
+tf.app.flags.DEFINE_boolean("explore", False,
+                            "run exploration statistics")
 tf.app.flags.DEFINE_boolean("use_fp16", False,
                             "Train using fp16 instead of fp32.")
 tf.app.flags.DEFINE_string("dataset_type", "udc", "udc or ql")
@@ -140,22 +141,32 @@ def create_model(session, forward_only):
   else:
     print("Created model with fresh parameters.")
     session.run(tf.initialize_all_variables())
+  print("Model initialized")
   return model
 
 
 def train():
-  print("Preparing data in %s" % FLAGS.data_dir)
-  questions_train, answers_train, questions_dev, answers_dev, _, _, _,  = data_utils_udc.prepare_data(
-      FLAGS.data_dir, FLAGS.en_vocab_size, FLAGS.dataset_type)
-  print("reading dictionaries")
-  vocab_path = os.path.join(FLAGS.data_dir,
-                                 "vocab%d.qa" % FLAGS.en_vocab_size)
-  vocab, rev_vocab = data_utils_udc.initialize_vocabulary(vocab_path)
-  # Read data into buckets and compute their sizes.
-  print ("Reading development and training data (limit: %d)."
-         % FLAGS.max_train_data_size)
-  dev_set = read_data(questions_dev, answers_dev)
-  train_set = read_data(questions_train, answers_train, FLAGS.max_train_data_size)
+    questions_train, answers_train, questions_dev, answers_dev, _, _, _, = data_utils_udc.prepare_data(
+        FLAGS.data_dir, FLAGS.en_vocab_size, FLAGS.dataset_type)
+    print("reading dictionaries")
+    vocab_path = os.path.join(FLAGS.data_dir,
+                              "vocab%d.qa" % FLAGS.en_vocab_size)
+    vocab, rev_vocab = data_utils_udc.initialize_vocabulary(vocab_path)
+    vectorizer = data_utils_udc.tfidfVectorizer(FLAGS.data_dir, vocab, FLAGS.dataset_type)
+    print("Preparing data in %s" % FLAGS.data_dir)
+
+    # Read data into buckets and compute their sizes.
+    print("Reading development and training data (limit: %d)."
+          % FLAGS.max_train_data_size)
+    dev_set = read_data(questions_dev, answers_dev)
+    train_set = read_data(questions_train, answers_train, FLAGS.max_train_data_size)
+    while True:
+        trainABit(train_set, dev_set, vocab, rev_vocab, vectorizer)
+        tf.reset_default_graph()
+        evaluate(vocab, rev_vocab, vectorizer)
+        tf.reset_default_graph()
+
+def trainABit(train_set, dev_set, vocab, rev_vocab, vectorizer):
   train_bucket_sizes = [len(train_set[b]) for b in xrange(len(_buckets))]
   train_total_size = float(sum(train_bucket_sizes))
 
@@ -164,7 +175,6 @@ def train():
   # the size if i-th training bucket, as used later.
   train_buckets_scale = [sum(train_bucket_sizes[:i + 1]) / train_total_size
                          for i in xrange(len(train_bucket_sizes))]
-  vectorizer = data_utils_udc.tfidfVectorizer(FLAGS.data_dir, vocab, FLAGS.dataset_type)
 
   with tf.Session() as sess:
     # Create model.
@@ -175,7 +185,7 @@ def train():
     step_time, loss = 0.0, 0.0
     current_step = 0
     previous_losses = []
-    while True:
+    while current_step <= 10 * FLAGS.steps_per_checkpoint:
       # Choose a bucket according to data distribution. We pick a random number
       # in [0, 1] and use the corresponding interval in train_buckets_scale.
       random_number_01 = np.random.random_sample()
@@ -197,11 +207,9 @@ def train():
       if current_step % FLAGS.steps_per_checkpoint == 0:
         # Print statistics for the previous epoch.
         perplexity = math.exp(float(loss)) if loss < 300 else float("inf")
-        MAP = evaluateMAPParameterized(sess, model, vocab, rev_vocab, vectorizer)
-
         print("global step %d learning rate %.4f step-time %.2f perplexity "
-               "%.2f loss %.2f %.4f" % (model.global_step.eval(), model.learning_rate.eval(),
-                         step_time, perplexity, loss, MAP))
+               "%.2f loss %.2f " % (model.global_step.eval(), model.learning_rate.eval(),
+                         step_time, perplexity, loss))
         # Decrease learning rate if no improvement was seen over last 3 times.
         if len(previous_losses) > 2 and loss > max(previous_losses[-3:]):
           sess.run(model.learning_rate_decay_op)
@@ -216,61 +224,93 @@ def train():
           if len(dev_set[bucket_id]) == 0:
             print("  eval: empty bucket %d" % (bucket_id))
             continue
-          encoder_inputs, decoder_inputs, target_weights = model.get_batch(
-              dev_set, bucket_id)
+          encoder_inputs, decoder_inputs, target_weights = model.get_batch(dev_set, bucket_id)
 
           _, eval_loss, outputs = model.step(sess, encoder_inputs, decoder_inputs,
                                              target_weights, bucket_id, True)
           eval_ppx = math.exp(float(eval_loss)) if eval_loss < 300 else float(
               "inf")
           print("  eval: bucket %d perplexity %.2f" % (bucket_id, eval_ppx))
-          total_bleu = 0.0
-          total_docs = 0
-          with open(os.path.join(FLAGS.data_dir,'evolution/responseEvolution-%d' % (model.global_step.eval())), 'w') as out:
-            out.write('Global step %d perplexity %.2f responses: +\n' % (model.global_step.eval(), perplexity))
-            vocab_outcomes = set()
-            vocab_expected = set()
-            bleu_score = 0.0
-            outcomes_T = np.array([np.argmax(logit, axis=1) for logit in outputs]).T
-            inputs_T = np.array(encoder_inputs).T
-            expected_T = np.array(decoder_inputs).T
-            for ex in range(len(outcomes_T)):
-              ut = [rev_vocab[w] for w in inputs_T[ex] if w != 0]
-              ut.reverse()
-              current_outcome = outcomes_T[ex].tolist()
-              if data_utils_udc.EOS_ID in current_outcome:
-                current_outcome = current_outcome[:current_outcome.index(data_utils_udc.EOS_ID)]
-              response = [rev_vocab[w] for w in current_outcome if w != 0]
-              expected = [rev_vocab[w] for w in expected_T[ex] if w != 0]
-              try:
-                  bleu_score += bleu([expected[1:-1]], response, [1])
-              except:
-                  print("Error computing BLEU", expected[1:-1], response)
-              vocab_outcomes = vocab_outcomes.union(set(response))
-              vocab_expected = vocab_expected.union(set(expected))
-              out.write("\t".join(["Utterance:", " ".join(ut)]) + "\n")
-              out.write("\t".join(["Response:", " ".join(response)]) + "\n")
-              out.write("\t".join(["Expected:", " ".join(expected)]) + "\n")
-            print("  vocab_outcomes size: %d vocab_expected size %d overlap size: %d BLEU: %.2f" %
-                  (len(vocab_outcomes), len(vocab_expected), len(vocab_outcomes.intersection(vocab_expected)), bleu_score/len(outcomes_T)))
-            out.write("  vocab_outcomes size: %d vocab_expected size %d overlap size: %d BLEU: %.2f" %
-                  (len(vocab_outcomes), len(vocab_expected), len(vocab_outcomes.intersection(vocab_expected)), bleu_score/len(outcomes_T)))
-            total_bleu += bleu_score
-            total_docs += len(outcomes_T)
-        BLEU = total_bleu / total_docs
-        if MAP > model.best_map.eval():
-            print("MAP increased from %.2f to %.2f" % (model.best_map.eval(), MAP))
-            sess.run(model.best_map.assign(MAP))
-            model.map_saver.save(sess, FLAGS.train_dir+"/best-map/", global_step=model.global_step.eval())
-        if BLEU > model.best_bleu.eval():
-            print("BLEU increased from %.2f to %.2f" % (model.best_bleu.eval(), BLEU))
-            sess.run(model.best_bleu.assign(BLEU))
-            model.map_saver.save(sess, FLAGS.train_dir+"/best-bleu/", global_step=model.global_step.eval())
-        with open(os.path.join(FLAGS.train_dir, 'scoreEvolution'), 'a') as out:
-            print("  step: %d perplexity: %.4f MAP: %.4f BLEU: %.4f" %
-                  (model.global_step.eval(), perplexity, MAP, total_bleu/total_docs))
-            out.write("\t".join(str(x) for x in [model.global_step.eval(), perplexity, MAP, total_bleu / total_docs])+ "\n")
+          persistResponses(decoder_inputs, encoder_inputs, model, outputs, perplexity, rev_vocab)
+
+        # with open(os.path.join(FLAGS.train_dir, 'scoreEvolution'), 'a') as out:
+        #     print("  step: %d perplexity: %.4f MAP dev: %.4f BLEU: %.4f" %
+        #           (model.global_step.eval(), perplexity, MAP_dev, BLEU_dev))
+        #     out.write("\t".join(str(x) for x in [model.global_step.eval(), perplexity, MAP_dev, BLEU_dev]) + "\n")
         sys.stdout.flush()
+
+def evaluate(vocab = None, rev_vocab = None, vectorizer = None):
+    with tf.Session() as sess:
+        model = create_model(sess, True)
+        if vocab is None:
+            vocab_path = os.path.join(FLAGS.data_dir,
+                                      "vocab%d.qa" % FLAGS.en_vocab_size)
+            vocab, rev_vocab = data_utils_udc.initialize_vocabulary(vocab_path)
+        if vectorizer is None:
+            vectorizer = data_utils_udc.tfidfVectorizer(FLAGS.data_dir, vocab, FLAGS.dataset_type)
+        evaluators = [BLEUEvaluator(),
+                      MAPEvaluator(),
+                      PersisterEvaluator(os.path.join(FLAGS.train_dir, 'responseEvolution-dev-%s' % model.global_step.eval())),
+                      VocabularyEvaluator()]
+        visitDatasetParameterized(sess, model, vocab, rev_vocab, vectorizer, 'dev', evaluators)
+        MAP_dev = evaluators[1].results()
+        BLEU_dev = evaluators[0].results()
+        ## Persister evaluator saves in a different file, so just call results()
+        evaluators[2].results()
+        vocab_eval = evaluators[3].results()
+        if MAP_dev > model.best_map.eval():
+            print("MAP increased from %.2f to %.2f" % (model.best_map.eval(), MAP_dev))
+            sess.run(model.best_map.assign(MAP_dev))
+            model.map_saver.save(sess, FLAGS.train_dir+"/best-map/", global_step=model.global_step.eval())
+        if BLEU_dev > model.best_bleu.eval():
+            print("BLEU increased from %.2f to %.2f" % (model.best_bleu.eval(), BLEU_dev))
+            sess.run(model.best_bleu.assign(BLEU_dev))
+            model.map_saver.save(sess, FLAGS.train_dir+"/best-bleu/", global_step=model.global_step.eval())
+        print("  step: %d perplexity: MAP dev: %.4f BLEU: %.4f" %
+              (model.global_step.eval(), MAP_dev, BLEU_dev))
+        score_path = os.path.join(FLAGS.train_dir, 'scoreEvolution')
+        if not os.path.isfile(score_path):
+            with open(score_path, 'w') as out:
+                out.write("\t".join(["Global step", "MAP", "BLEU", "Vocab size", "Target Vocab Size", "Intersection Vocab size"])+"\n")
+        with open(score_path, 'a') as out:
+            out.write("\t".join([
+                str(model.global_step.eval()), str(MAP_dev), str(BLEU_dev), str(vocab_eval[0][1]), str(vocab_eval[1][1]), str(vocab_eval[2][1])
+            ]) + "\n")
+
+
+
+
+
+def persistResponses(decoder_inputs, encoder_inputs, model, outputs, perplexity, rev_vocab):
+    with open(os.path.join(FLAGS.data_dir, 'evolution/responseEvolution-%d' % (model.global_step.eval())), 'w') as out:
+        out.write('Global step %d perplexity %.2f responses: +\n' % (model.global_step.eval(), perplexity))
+        vocab_outcomes = set()
+        vocab_expected = set()
+        bleu_score = 0.0
+        outcomes_T = np.array([np.argmax(logit, axis=1) for logit in outputs]).T
+        inputs_T = np.array(encoder_inputs).T
+        expected_T = np.array(decoder_inputs).T
+        for ex in range(len(outcomes_T)):
+            ut = [rev_vocab[w] for w in inputs_T[ex] if w != 0]
+            ut.reverse()
+            current_outcome = outcomes_T[ex].tolist()
+            if data_utils_udc.EOS_ID in current_outcome:
+                current_outcome = current_outcome[:current_outcome.index(data_utils_udc.EOS_ID)]
+            response = [rev_vocab[w] for w in current_outcome if w != 0]
+            expected = [rev_vocab[w] for w in expected_T[ex] if w != 0]
+            try:
+                bleu_score += bleu([expected[1:-1]], response, [1])
+            except:
+                print("Error computing BLEU", expected[1:-1], response)
+            vocab_outcomes = vocab_outcomes.union(set(response))
+            vocab_expected = vocab_expected.union(set(expected))
+            out.write("\t".join(["Utterance:", " ".join(ut)]) + "\n")
+            out.write("\t".join(["Response:", " ".join(response)]) + "\n")
+            out.write("\t".join(["Expected:", " ".join(expected)]) + "\n")
+        print("  vocab_outcomes size: %d vocab_expected size %d overlap size: %d " %
+              (len(vocab_outcomes), len(vocab_expected), len(vocab_outcomes.intersection(vocab_expected))))
+        out.write("  vocab_outcomes size: %d vocab_expected size %d overlap size: %d " %
+                  (len(vocab_outcomes), len(vocab_expected), len(vocab_outcomes.intersection(vocab_expected))))
 
 
 def decode(sess):
@@ -324,74 +364,48 @@ def evalSentence(sentence, model, en_vocab, rev_fr_vocab, sess):
   return " ".join([tf.compat.as_str(rev_fr_vocab[output]) for output in outputs])
 
 
-def evaluateMAP():
-    vocab, rev_vocab = getVocabularies()
-    vectorizer = data_utils_udc.tfidfVectorizer(FLAGS.data_dir, vocab, FLAGS.dataset_type)
 
-    with tf.Session() as sess:
-        # Create model and load parameters.
-        model = create_model(sess, True)
-        model.batch_size = 1  # We decode one sentence at a time.
-        return evaluateMAPParameterized(sess, model, vocab, rev_vocab, vectorizer)
+ql_home = "/home/martin/data/qatarliving"
+ql_sets = {}
+ql_sets['dev'] = os.path.join(ql_home, "dev/SemEval2016-Task3-CQA-QL-dev-subtaskA-with-multiline.xml")
+ql_sets['train'] = os.path.join(ql_home, "train/SemEval2016-Task3-CQA-QL-train-part1-subtaskA-with-multiline.xml")
+ql_sets['test'] = os.path.join(ql_home, "test/SemEval2016-Task3-CQA-QL-test-subtaskA-with-multiline-input.xml")
 
-
-def evaluateMAPParameterized(sess, model, vocab, rev_vocab, vectorizer):
-    meanAvgPrecision = 0.0
-    meanAvgPrecisionQ = 0.0
-    totalQueries = 0
-    for (q, answers) in QLXMLReaderPy.read(
-            "/home/martin/data/qatarliving/dev/SemEval2016-Task3-CQA-QL-dev-subtaskA-with-multiline.xml"):
-        answers_transformed = vectorizer.transform([a[0] for a in answers])
+def visitDatasetParameterized(sess, model, vocab, rev_vocab, vectorizer, ds, evaluators = []):
+    for (q, answers) in QLXMLReaderPy.read(ql_sets[ds]):
         correct = [a[1] for a in answers]
         if sum(correct) == 0:
             continue
         response = evalSentence(q, model, vocab, rev_vocab, sess)
-        response_transformed = vectorizer.transform([response])
-        score = calculateMAP(answers_transformed, correct, response_transformed)
-        question_transformed = vectorizer.transform([q])
-        score_q = calculateMAP(answers_transformed, correct, question_transformed)
-        meanAvgPrecision += score
-        meanAvgPrecisionQ += score_q
-        totalQueries += 1
-    meanAvgPrecision /= totalQueries
-    meanAvgPrecisionQ /= totalQueries
-    print("MAP:", meanAvgPrecision)
-    print("MAP Question:", meanAvgPrecisionQ)
-    return meanAvgPrecision
+        for evaluator in evaluators:
+            evaluator.update(q, response, answers, vectorizer)
 
 
-def calculateMAP(answers_transformed, correct, response_transformed):
-    distances = cosine_distances(response_transformed, answers_transformed)
-    results = list(zip(distances[0], correct))
-    results.sort()
-    relevant_docs = 0
-    score = 0.0
-    for i, r in enumerate(results):
-        if r[1]:
-            relevant_docs += 1
-            score += relevant_docs / (i + 1)
-    score = score / relevant_docs
-    return score
+def explore():
+    explorer.explore([ql_sets["dev"], ql_sets["test"]])
+
 
 
 def main(_):
-  if FLAGS.decode:
-      with tf.Session() as sess:
-          responder = decode(sess)
-          # Decode from standard input.
-          sys.stdout.write("> ")
-          sys.stdout.flush()
-          sentence = sys.stdin.readline()
-          while sentence:
-              response = responder(sentence)
-              print(response)
-              print("> ", end="")
-              sys.stdout.flush()
-              sentence = sys.stdin.readline()
-  elif FLAGS.eval:
-    evaluateMAP()
-  else:
-    train()
+    if FLAGS.explore:
+        explore()
+    if FLAGS.decode:
+        with tf.Session() as sess:
+            responder = decode(sess)
+            # Decode from standard input.
+            sys.stdout.write("> ")
+            sys.stdout.flush()
+            sentence = sys.stdin.readline()
+            while sentence:
+                response = responder(sentence)
+                print(response)
+                print("> ", end="")
+                sys.stdout.flush()
+                sentence = sys.stdin.readline()
+    elif FLAGS.eval:
+        evaluate()
+    else:
+        train()
 
 
 

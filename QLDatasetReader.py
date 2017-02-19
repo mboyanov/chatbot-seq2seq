@@ -26,7 +26,6 @@ class QLDatasetReader(DatasetReader):
                 continue
             yield (data[6], data[7])
 
-
 class FilteredDatasetReader(QLDatasetReader):
 
     def __init__(self):
@@ -39,7 +38,6 @@ class FilteredDatasetReader(QLDatasetReader):
         return item[0] not in self.allowed_ids
 
     def good_ids(data_path):
-
         df_list = []
         data_path_pred = os.path.join(data_path, 'predictions')
         tree = ET.parse(os.path.join(data_path_pred, 'exclude-2016.xml'))
@@ -96,6 +94,11 @@ class FilteredDatasetReader(QLDatasetReader):
 
     def conversations(self, data_path, tokenizer):
         return super(FilteredDatasetReader, self).conversations(data_path, tokenizer, self.exclude_fn)
+
+#r = FilteredDatasetReader()
+#with open('/home/martin/data/qatarliving/matchedPairs_ver5/matchPairs_B/train-filtered.csv', 'w') as out:
+#    for conv in r.conversations("/home/martin/data/qatarliving/matchedPairs_ver5/matchPairs_B/train.csv", None):
+#        out.write("\t".join(conv).strip() + "\n")
 
 
 #FilteredDatasetReader.good_ids("/home/martin/data/qatarliving/matchedPairs_ver5/matchPairs_B")
