@@ -49,7 +49,7 @@ from evaluators.bleu_evaluator import BLEUEvaluator
 from evaluators.map_evaluator import MAPEvaluator
 from evaluators.persister_evaluator import PersisterEvaluator
 from evaluators.vocabulary_evaluator import VocabularyEvaluator
-
+from nltk.translate.bleu_score import  sentence_bleu as bleu
 tf.app.flags.DEFINE_float("learning_rate", 0.5, "Learning rate.")
 tf.app.flags.DEFINE_float("learning_rate_decay_factor", 0.99,
                           "Learning rate decays by this much.")

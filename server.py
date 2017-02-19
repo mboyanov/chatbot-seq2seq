@@ -13,11 +13,12 @@ app.config['CORS_HEADERS'] = 'Content-Type'
 @app.route("/")
 @cross_origin()
 def bot():
-    msg = request.args.get('message','')
+    msg = request.args.get('message', '')
     response = {
         "message": responder(msg)
     }
     return json.dumps(response)
+
 
 def responder(s):
     return "hi"

@@ -14,7 +14,7 @@ var messages = [], //array that hold the record of each string in chat
 function chatbotResponse() {
   talking = true;
   botMessage = "I'm confused"; //the default message
-  $.getJSON( "http://130.204.38.222:5000", {"message": lastUserMessage}, function( data ) {
+  $.getJSON( "http://130.204.203.149:5000", {"message": lastUserMessage}, function( data ) {
     botMessage = data['message'];
     messages.push("<b>" + botName + ":</b> " + botMessage);
     // says the message using the text to speech function written below
@@ -56,7 +56,7 @@ function Speech(say) {
     //utterance.pitch = 1; //0 to 2
     //utterance.text = 'Hello World';
     //utterance.lang = 'en-US';
-    speechSynthesis.speak(utterance);
+    //speechSynthesis.speak(utterance);
   }
 }
 
