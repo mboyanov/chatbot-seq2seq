@@ -258,14 +258,18 @@ def evaluate(vocab = None, rev_vocab = None, vectorizer = None):
         ## Persister evaluator saves in a different file, so just call results()
         evaluators[2].results()
         vocab_eval = evaluators[3].results()
+        checkpoint_path = os.path.join(FLAGS.train_dir, "translate.ckpt")
+
         if MAP_dev > model.best_map.eval():
             print("MAP increased from %.2f to %.2f" % (model.best_map.eval(), MAP_dev))
             sess.run(model.best_map.assign(MAP_dev))
             model.map_saver.save(sess, FLAGS.train_dir+"/best-map/", global_step=model.global_step.eval())
+            model.saver.save(sess, checkpoint_path, global_step=model.global_step.eval())
         if BLEU_dev > model.best_bleu.eval():
             print("BLEU increased from %.2f to %.2f" % (model.best_bleu.eval(), BLEU_dev))
             sess.run(model.best_bleu.assign(BLEU_dev))
             model.map_saver.save(sess, FLAGS.train_dir+"/best-bleu/", global_step=model.global_step.eval())
+            model.saver.save(sess, checkpoint_path, global_step=model.global_step.eval())
         print("  step: %d perplexity: MAP dev: %.4f BLEU: %.4f" %
               (model.global_step.eval(), MAP_dev, BLEU_dev))
         score_path = os.path.join(FLAGS.train_dir, 'scoreEvolution')
