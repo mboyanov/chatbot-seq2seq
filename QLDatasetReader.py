@@ -17,14 +17,14 @@ class QLDatasetReader(DatasetReader):
             for w in tokenizer(data[6]) + tokenizer(data[7]):
                 yield w
 
-    def conversations(self, data_path, tokenizer, exclude_fn=lambda x: False):
+    def conversations(self, data_path, tokenizer, exclude_fn=lambda x: False, yield_fn= lambda x: (x[6], x[7])):
         for line in open(data_path):
             data = line.split("\t")
             if len(data) < 8 or data[6] is None or data[7] is None:
                 continue
             if exclude_fn(data):
                 continue
-            yield (data[6], data[7])
+            yield yield_fn(data)
 
 class FilteredDatasetReader(QLDatasetReader):
 
@@ -95,8 +95,8 @@ class FilteredDatasetReader(QLDatasetReader):
     def conversations(self, data_path, tokenizer):
         return super(FilteredDatasetReader, self).conversations(data_path, tokenizer, self.exclude_fn)
 
-#r = FilteredDatasetReader()
-#with open('/home/martin/data/qatarliving/matchedPairs_ver5/matchPairs_B/train-filtered.csv', 'w') as out:
+#r = FilteredDatasetReader(yield_fn=lambda x: x)
+#with open('/home/martin/data/qatarliving/matchedPairs_ver5/matchPairs_B/train-filtered-feb.csv', 'w') as out:
 #    for conv in r.conversations("/home/martin/data/qatarliving/matchedPairs_ver5/matchPairs_B/train.csv", None):
 #        out.write("\t".join(conv).strip() + "\n")
 
