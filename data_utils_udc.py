@@ -19,15 +19,13 @@ from __future__ import division
 from __future__ import print_function
 
 import os
-import re
 
 from tensorflow.python.platform import gfile
-from collections import defaultdict
 from UDCDatasetReader import UDCDatasetReader
 from QLDatasetReader import QLDatasetReader, FilteredDatasetReader
 from sklearn.feature_extraction.text import TfidfVectorizer
 import numpy as np
-from tokenizer import tokenizer as default_tokenizer
+from tokenizer.tokenizer import Tokenizer, BPETokenizer
 
 # Special vocabulary symbols - we always put them at the start.
 _PAD = b"_PAD"
@@ -41,15 +39,12 @@ GO_ID = 1
 EOS_ID = 2
 UNK_ID = 3
 
-# Regular expressions used to tokenize.
-_DIGIT_RE = re.compile(r"\d")
-_DIGIT_RE_B = re.compile(br"\d")
-
-
+default_tokenizer = Tokenizer(_UNK)
+bpe_tokenizer = BPETokenizer(open("/home/martin/projects/subword-nmt/vocab_bpe"), _START_VOCAB)
 
 
 def create_vocabulary(vocabulary_path, data_path, max_vocabulary_size, dataset_reader,
-                      tokenizer=default_tokenizer, normalize_digits=True):
+                      tokenizer=default_tokenizer, persist_counts = False):
     """Create vocabulary file (if it does not exist yet) from data file.
 
     Data file is assumed to contain one sentence per line. Each sentence is
@@ -64,25 +59,19 @@ def create_vocabulary(vocabulary_path, data_path, max_vocabulary_size, dataset_r
       max_vocabulary_size: limit on the size of the created vocabulary.
       dataset_reader: used to read the dataset
       tokenizer: a function to use to tokenize each data sentence;
-      normalize_digits: Boolean; if true, all digits are replaced by 0s.
     """
     if not gfile.Exists(vocabulary_path):
         print("Creating vocabulary %s from data %s" % (vocabulary_path, data_path))
-        vocab = defaultdict(lambda: 0)
-        for w in dataset_reader.words(data_path, tokenizer):
-            word = _DIGIT_RE.sub("0", w) if normalize_digits else w
-            vocab[word] += 1
-        vocab_list = _START_VOCAB + sorted(vocab, key=vocab.get, reverse=True)
-        print('Total words', len(vocab_list))
-        print('top20', vocab_list[:20])
-        if len(vocab_list) > max_vocabulary_size:
-            vocab_list = vocab_list[:max_vocabulary_size]
+        vocab_list = tokenizer.fit(dataset_reader.conversations(data_path), max_vocabulary_size, _START_VOCAB)
         with gfile.GFile(vocabulary_path, mode="wb") as vocab_file:
             for w in vocab_list:
-                vocab_file.write(str(w) + "\n")
+                if persist_counts:
+                    vocab_file.write(str(w[0]) +" " + str(w[1]) + "\n")
+                else:
+                    vocab_file.write(str(w[0]) + "\n")
 
 
-def initialize_vocabulary(vocabulary_path):
+def initialize_tokenizer(vocabulary_path, is_bpe=True):
     """Initialize vocabulary from file.
 
     We assume the vocabulary is stored one-item-per-line, so a file:
@@ -101,19 +90,19 @@ def initialize_vocabulary(vocabulary_path):
     Raises:
       ValueError: if the provided vocabulary_path does not exist.
     """
+    if is_bpe:
+        return bpe_tokenizer
     if gfile.Exists(vocabulary_path):
         rev_vocab = []
         with gfile.GFile(vocabulary_path, mode="rb") as f:
             rev_vocab.extend(f.readlines())
         rev_vocab = [line.strip() for line in rev_vocab]
-        vocab = dict([(x, y) for (y, x) in enumerate(rev_vocab)])
-        return vocab, rev_vocab
+        return Tokenizer(_UNK, vocab_list=rev_vocab)
     else:
         raise ValueError("Vocabulary file %s not found.", vocabulary_path)
 
 
-def sentence_to_token_ids(sentence, vocabulary,
-                          tokenizer=default_tokenizer, normalize_digits=True):
+def sentence_to_token_ids(sentence, tokenizer):
     """Convert a string to list of integers representing token-ids.
 
     For example, a sentence "I have a dog" may become tokenized into
@@ -125,26 +114,18 @@ def sentence_to_token_ids(sentence, vocabulary,
       vocabulary: a dictionary mapping tokens to integers.
       tokenizer: a function to use to tokenize each sentence;
         if None, basic_tokenizer will be used.
-      normalize_digits: Boolean; if true, all digits are replaced by 0s.
 
     Returns:
       a list of integers, the token-ids for the sentence.
     """
 
-    words = tokenizer(sentence)
-    if not normalize_digits:
-        return [vocabulary.get(w, UNK_ID) for w in words]
-    # Normalize digits by 0 before looking words up in the vocabulary.
+    words = tokenizer.transform(sentence)
     if len(words) == 0:
         return None
-    if type(words[0] == 'str'):
-        return [vocabulary.get(_DIGIT_RE.sub("0", w), UNK_ID) for w in words]
-    else:
-        return [vocabulary.get(_DIGIT_RE.sub("0", w), UNK_ID) for w in words]
+    return words
 
 
-def data_to_token_ids(data_path, questions_path, answers_path, vocabulary_path, dataset_reader,
-                      tokenizer=default_tokenizer, normalize_digits=True):
+def data_to_token_ids(data_path, questions_path, answers_path, vocabulary_path, dataset_reader):
     """Tokenize data file and turn into token-ids using given vocabulary file.
 
     This function loads data line-by-line from data_path, calls the above
@@ -162,15 +143,15 @@ def data_to_token_ids(data_path, questions_path, answers_path, vocabulary_path, 
         print("files already tokenized")
         return
     print("Tokenizing data in %s" % data_path)
-    vocab, _ = initialize_vocabulary(vocabulary_path)
+    tokenizer = initialize_tokenizer(vocabulary_path)
     lengths_q = []
     lengths_a = []
     with gfile.GFile(questions_path, mode="w") as questions_tokens_file:
         with gfile.GFile(answers_path, mode="w") as answers_tokens_file:
-            for q, a in dataset_reader.conversations(data_path, tokenizer):
-                token_ids = sentence_to_token_ids(q, vocab, tokenizer, normalize_digits)
-                token_ids_answer = sentence_to_token_ids(a, vocab, tokenizer, normalize_digits)
-                if (token_ids is not None and token_ids_answer is not None):
+            for q, a in dataset_reader.conversations(data_path):
+                token_ids = sentence_to_token_ids(q, tokenizer)
+                token_ids_answer = sentence_to_token_ids(a, tokenizer)
+                if token_ids is not None and token_ids_answer is not None:
                     lengths_q.append(len(token_ids))
                     lengths_a.append(len(token_ids_answer))
                     questions_tokens_file.write(" ".join([str(tok) for tok in token_ids]) + "\n")
@@ -213,19 +194,18 @@ def prepare_data(data_dir, vocabulary_size, dataset_type, tokenizer=default_toke
         paths.append(answer_ids_path)
         data_to_token_ids(path, question_ids_path, answer_ids_path,
                           vocab_path,
-                          reader,
-                          tokenizer)
+                          reader)
     paths.append(vocab_path)
     return paths
 
-def tfidfVectorizer(data_dir, vocab, dataset_type, tokenizer=default_tokenizer):
+def tfidfVectorizer(data_dir, vocab, dataset_type, tokenizer=default_tokenizer.tokenize):
     train_path = os.path.join(data_dir, 'train.csv')
     train_dataset_reader, _ = getReadersByDatasetType(dataset_type)
     answers = []
-    for (q, a) in train_dataset_reader.conversations(train_path, tokenizer):
+    for (q, a) in train_dataset_reader.conversations(train_path):
         answers.append(a)
     vectorizer = TfidfVectorizer(vocabulary=vocab, tokenizer=tokenizer)
-    vectorizer.fit_transform(answers)
+    vectorizer.fit(answers)
     return vectorizer
 
 
@@ -236,3 +216,7 @@ def getReadersByDatasetType(dataset_type):
         #filteredReader = FilteredDatasetReader()
         qlReader = QLDatasetReader()
         return qlReader, qlReader
+
+
+# r1, r2 = getReadersByDatasetType('ql')
+# create_vocabulary('/tmp/vocab', '/home/martin/data/qatarliving/matchedPairs_ver5/matchPairs_B/train.csv', 999999999, r1, persist_counts=True)

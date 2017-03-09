@@ -17,7 +17,7 @@ class QLDatasetReader(DatasetReader):
             for w in tokenizer(data[6]) + tokenizer(data[7]):
                 yield w
 
-    def conversations(self, data_path, tokenizer, exclude_fn=lambda x: False, yield_fn= lambda x: (x[6], x[7])):
+    def conversations(self, data_path, exclude_fn=lambda x: False, yield_fn=lambda x: (x[6], x[7])):
         for line in open(data_path):
             data = line.split("\t")
             if len(data) < 8 or data[6] is None or data[7] is None:
@@ -92,12 +92,12 @@ class FilteredDatasetReader(QLDatasetReader):
     def words(self, data_path, tokenizer):
         return super(FilteredDatasetReader, self).words(data_path, tokenizer, self.exclude_fn)
 
-    def conversations(self, data_path, tokenizer):
-        return super(FilteredDatasetReader, self).conversations(data_path, tokenizer, self.exclude_fn)
+    def conversations(self, data_path, yield_fn= lambda x: x):
+        return super(FilteredDatasetReader, self).conversations(data_path, self.exclude_fn, yield_fn)
 
-#r = FilteredDatasetReader(yield_fn=lambda x: x)
+#r = FilteredDatasetReader()
 #with open('/home/martin/data/qatarliving/matchedPairs_ver5/matchPairs_B/train-filtered-feb.csv', 'w') as out:
-#    for conv in r.conversations("/home/martin/data/qatarliving/matchedPairs_ver5/matchPairs_B/train.csv", None):
+#    for conv in r.conversations("/home/martin/data/qatarliving/matchedPairs_ver5/matchPairs_B/train.csv", None, yield_fn = lambda x: x):
 #        out.write("\t".join(conv).strip() + "\n")
 
 

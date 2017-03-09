@@ -25,7 +25,7 @@ class UDCDatasetReader(DatasetReader):
                     for w in tokens:
                         yield w
 
-    def conversations(self, data_path, tokenizer):
+    def conversations(self, data_path):
         counter = 0
         r = csv.reader(open(data_path, 'rb'), encoding='utf-8')
         next(r)
