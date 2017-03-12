@@ -76,6 +76,9 @@ class BPETokenizer(Tokenizer):
         self.singles = {}
         self.start_vocab = start_vocab
 
+    def __call__(self, *args, **kwargs):
+        return self.transform(*args)
+
 
     def transform(self, sentence):
         tokens = Tokenizer.tokenize(self, sentence)
