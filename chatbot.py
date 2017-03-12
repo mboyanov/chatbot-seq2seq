@@ -277,36 +277,6 @@ def evaluate(tokenizer = None, vectorizer = None):
 
 
 
-def persistResponses(decoder_inputs, encoder_inputs, model, outputs, perplexity, tokenizer):
-    with open(os.path.join(FLAGS.data_dir, 'evolution/responseEvolution-%d' % (model.global_step.eval())), 'w') as out:
-        out.write('Global step %d perplexity %.2f responses: +\n' % (model.global_step.eval(), perplexity))
-        vocab_outcomes = set()
-        vocab_expected = set()
-        bleu_score = 0.0
-        outcomes_T = np.array([np.argmax(logit, axis=1) for logit in outputs]).T
-        inputs_T = np.array(encoder_inputs).T
-        expected_T = np.array(decoder_inputs).T
-        for ex in range(len(outcomes_T)):
-            ut = tokenizer.inverse_transform(inputs_T[ex])
-            current_outcome = outcomes_T[ex].tolist()
-            if data_utils_udc.EOS_ID in current_outcome:
-                current_outcome = current_outcome[:current_outcome.index(data_utils_udc.EOS_ID)]
-            response = tokenizer.inverse_transform(current_outcome)
-            expected = tokenizer.inverse_transform(expected_T[ex])
-            try:
-                bleu_score += bleu([expected[1:-1]], response, [1])
-            except:
-                print("Error computing BLEU", expected[1:-1], response)
-            vocab_outcomes = vocab_outcomes.union(set(response))
-            vocab_expected = vocab_expected.union(set(expected))
-            out.write("\t".join(["Utterance:", "".join(ut)]) + "\n")
-            out.write("\t".join(["Response:", "".join(response)]) + "\n")
-            out.write("\t".join(["Expected:", "".join(expected[1:-1])]) + "\n")
-        print("  vocab_outcomes size: %d vocab_expected size %d overlap size: %d " %
-              (len(vocab_outcomes), len(vocab_expected), len(vocab_outcomes.intersection(vocab_expected))))
-        out.write("  vocab_outcomes size: %d vocab_expected size %d overlap size: %d " %
-                  (len(vocab_outcomes), len(vocab_expected), len(vocab_outcomes.intersection(vocab_expected))))
-
 
 def decode(sess):
     # Create model and load parameters.
@@ -353,7 +323,7 @@ def evalSentence(sentence, model, tokenizer, sess):
   # If there is an EOS symbol in outputs, cut them at that point.
   if data_utils_udc.EOS_ID in outputs:
     outputs = outputs[:outputs.index(data_utils_udc.EOS_ID)]
-  return "".join(tokenizer.inverse_transform(outputs))
+  return tokenizer.inverse_transform(outputs)
 
 
 

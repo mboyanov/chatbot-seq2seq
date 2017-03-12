@@ -103,6 +103,10 @@ class BPETokenizer(Tokenizer):
         output = []
         for token in token_ids:
             if token < len(self.start_vocab):
+                if self.start_vocab[token] == b"_EOS":
+                    break
+                elif self.start_vocab[token] == b"_PAD":
+                    continue
                 output.append(str(self.start_vocab[token]))
             elif token < len(self.codes):
                 bp = self.codes[token]
@@ -111,7 +115,7 @@ class BPETokenizer(Tokenizer):
                 output.append(' ')
             else:
                 output.append(chr(token - len(self.codes) - 1))
-        return output
+        return "".join(output)
 
 
     def get_pairs(self, word):
@@ -172,12 +176,12 @@ class BPETokenizer(Tokenizer):
         return word, word_indices
 
 
-a = BPETokenizer(open("/home/martin/projects/subword-nmt/vocab_bpe"), [b"GO", b"UNK", b"EOS", b"PAD"])
+a = BPETokenizer(open("/home/martin/projects/subword-nmt/vocab_bpe"), [b"GO", b"UNK", b"_EOS", b"_PAD"])
 t = a.transform("i'm considering to take on a job opportunity in doha however as i am married with my male partner who is not a european i would need to know if i could have him granted a visa on the gounds of him being my legal partner and if my life would turn into a living hell once in qatar .")
-#t = a.transform("electroworltdltd00@yahoo gounds")
 t2 = a.inverse_transform(t+[1])
-inp = [122,1172,63,33,2866,234,158,2177,73,4,3,2,1,0]
+inp = [122, 2, 1172,63,33,2866,234,158,2177,73,4,3,2,1,0]
 t3 = a.inverse_transform(inp)
-print(t3)
-print (t)
-print(t2)
+assert(t3.strip() == "not")
+inp = [122, 1172,63,33,2866,234,158,2177,73,3,2,1,0]
+t3 = a.inverse_transform(inp)
+assert(t3.strip() == "not yet it is covered by your insurance ?")
