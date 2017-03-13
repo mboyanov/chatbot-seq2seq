@@ -84,33 +84,7 @@ FLAGS = tf.app.flags.FLAGS
 _buckets = [(5, 10), (10, 15), (20, 25), (40, 50)]
 
 
-def read_data(source_path, target_path, max_size=None):
-    """Read data from source and target files and put into buckets.
 
-    Args:
-      source_path: path to the files with token-ids for the source language.
-      target_path: path to the file with token-ids for the target language;
-        it must be aligned with the source file: n-th line contains the desired
-        output for n-th line from the source_path.
-      max_size: maximum number of lines to read, all other will be ignored;
-        if 0 or None, data files will be read completely (no limit).
-
-    Returns:
-      data_set: a list of length len(_buckets); data_set[n] contains a list of
-        (source, target) pairs read from the provided data files that fit
-        into the n-th bucket, i.e., such that len(source) < _buckets[n][0] and
-        len(target) < _buckets[n][1]; source and target are lists of token-ids.
-    """
-    data_set = [[] for _ in _buckets]
-    for source, target in trainingFilesReader.read(source_path, target_path, max_size):
-        source_ids = [int(x) for x in source.split()]
-        target_ids = [int(x) for x in target.split()]
-        target_ids.append(data_utils_udc.EOS_ID)
-        for bucket_id, (source_size, target_size) in enumerate(_buckets):
-            if len(source_ids) < source_size and len(target_ids) < target_size:
-                data_set[bucket_id].append([source_ids, target_ids])
-                break
-    return data_set
 
 
 def create_model(session, forward_only):
@@ -137,8 +111,10 @@ def create_model(session, forward_only):
   print("Model initialized")
   return model
 
+from execution_plan import ExecutionPlan
 
 def train():
+    execution_plan = ExecutionPlan('/home/martin/data/udc/', os.path.join(ql_home, 'matchedPairs_ver5/'), 250000, 50000, FLAGS.en_vocab_size, _buckets)
     questions_train, answers_train, questions_dev, answers_dev, _, _, _, = data_utils_udc.prepare_data(
         FLAGS.data_dir, FLAGS.en_vocab_size, FLAGS.dataset_type)
     print("reading dictionaries")
@@ -152,28 +128,27 @@ def train():
     # Read data into buckets and compute their sizes.
     print("Reading development and training data (limit: %d)."
           % FLAGS.max_train_data_size)
-    dev_set = read_data(questions_dev, answers_dev)
-    train_set = read_data(questions_train, answers_train, FLAGS.max_train_data_size)
     while True:
-        trainABit(train_set, dev_set, tokenizer)
+        trainABit(execution_plan)
         tf.reset_default_graph()
         evaluate(tokenizer, vectorizer)
         tf.reset_default_graph()
 
-def trainABit(train_set, dev_set, tokenizer):
-  train_bucket_sizes = [len(train_set[b]) for b in xrange(len(_buckets))]
-  train_total_size = float(sum(train_bucket_sizes))
-
-  # A bucket scale is a list of increasing numbers from 0 to 1 that we'll use
-  # to select a bucket. Length of [scale[i], scale[i+1]] is proportional to
-  # the size if i-th training bucket, as used later.
-  train_buckets_scale = [sum(train_bucket_sizes[:i + 1]) / train_total_size
-                         for i in xrange(len(train_bucket_sizes))]
-
+def trainABit(execution_plan):
   with tf.Session() as sess:
     # Create model.
     print("Creating %d layers of %d units." % (FLAGS.num_layers, FLAGS.size))
     model = create_model(sess, False)
+    dev_set, train_set = execution_plan.getData(model.global_step.eval())
+    train_bucket_sizes = [len(train_set[b]) for b in xrange(len(_buckets))]
+    train_total_size = float(sum(train_bucket_sizes))
+
+    # A bucket scale is a list of increasing numbers from 0 to 1 that we'll use
+    # to select a bucket. Length of [scale[i], scale[i+1]] is proportional to
+    # the size if i-th training bucket, as used later.
+    train_buckets_scale = [sum(train_bucket_sizes[:i + 1]) / train_total_size
+                           for i in xrange(len(train_bucket_sizes))]
+
     # This is the training loop.
     step_time, loss = 0.0, 0.0
     current_step = 0
@@ -226,7 +201,6 @@ def trainABit(train_set, dev_set, tokenizer):
           eval_ppx = math.exp(float(eval_loss)) if eval_loss < 300 else float(
               "inf")
           print("  eval: bucket %d perplexity %.2f" % (bucket_id, eval_ppx))
-          #persistResponses(decoder_inputs, encoder_inputs, model, outputs, perplexity, tokenizer)
 
         sys.stdout.flush()
 
