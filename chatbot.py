@@ -50,6 +50,9 @@ from evaluators.bleu_evaluator import BLEUEvaluator
 from evaluators.map_evaluator import MAPEvaluator
 from evaluators.persister_evaluator import PersisterEvaluator
 from evaluators.vocabulary_evaluator import VocabularyEvaluator
+from evaluators.map_evaluator_summed import MAPEvaluatorSummed
+from evaluators.ttr_evaluator import TTREvaluator
+from evaluators.length_evaluator import LengthEvaluator
 import trainingFilesReader
 
 tf.app.flags.DEFINE_float("learning_rate", 0.5, "Learning rate.")
@@ -81,7 +84,7 @@ FLAGS = tf.app.flags.FLAGS
 
 # We use a number of buckets and pad to the closest one for efficiency.
 # See seq2seq_model.Seq2SeqModel for details of how they work.
-_buckets = [(5, 10), (10, 15), (20, 25), (40, 50)]
+_buckets = [(5, 10), (10, 15), (20, 25), (40,45)]
 
 
 
@@ -100,7 +103,8 @@ def create_model(session, forward_only):
       FLAGS.learning_rate,
       FLAGS.learning_rate_decay_factor,
       forward_only=forward_only,
-      dtype=dtype)
+      dtype=dtype,
+      dropout=0.3)
   ckpt = tf.train.get_checkpoint_state(FLAGS.train_dir)
   if ckpt:
     print("Reading model parameters from %s" % ckpt.model_checkpoint_path)
@@ -114,7 +118,7 @@ def create_model(session, forward_only):
 from execution_plan import ExecutionPlan
 
 def train():
-    execution_plan = ExecutionPlan('/home/martin/data/udc/', os.path.join(ql_home, 'matchedPairs_ver5/'), 250000, 50000, FLAGS.en_vocab_size, _buckets)
+    execution_plan = ExecutionPlan('/home/martin/data/udc/', os.path.join(ql_home, 'matchedPairs_ver5/'), 50000, 50000, FLAGS.en_vocab_size, _buckets)
     questions_train, answers_train, questions_dev, answers_dev, _, _, _, = data_utils_udc.prepare_data(
         FLAGS.data_dir, FLAGS.en_vocab_size, FLAGS.dataset_type)
     print("reading dictionaries")
@@ -141,6 +145,7 @@ def trainABit(execution_plan):
     model = create_model(sess, False)
     dev_set, train_set = execution_plan.getData(model.global_step.eval())
     train_bucket_sizes = [len(train_set[b]) for b in xrange(len(_buckets))]
+    print("Train bucket sizes", train_bucket_sizes)
     train_total_size = float(sum(train_bucket_sizes))
 
     # A bucket scale is a list of increasing numbers from 0 to 1 that we'll use
@@ -214,16 +219,9 @@ def evaluate(tokenizer = None, vectorizer = None):
             tokenizer_normal = data_utils_udc.initialize_tokenizer(vocab_path, False)
         if vectorizer is None:
             vectorizer = data_utils_udc.tfidfVectorizer(FLAGS.data_dir, tokenizer_normal.vocab, FLAGS.dataset_type)
-        evaluators = [BLEUEvaluator(),
-                      MAPEvaluator(),
-                      PersisterEvaluator(os.path.join(FLAGS.train_dir, 'responseEvolution-dev-%s' % model.global_step.eval())),
-                      VocabularyEvaluator()]
-        visitDatasetParameterized(sess, model, tokenizer, vectorizer, 'dev', evaluators)
-        MAP_dev = evaluators[1].results()
-        BLEU_dev = evaluators[0].results()
-        ## Persister evaluator saves in a different file, so just call results()
-        evaluators[2].results()
-        vocab_eval = evaluators[3].results()
+
+        evaluateDataset(model, sess, tokenizer, vectorizer, 'test')
+        MAP_dev, BLEU_dev = evaluateDataset(model, sess, tokenizer, vectorizer, 'dev')
         checkpoint_path = os.path.join(FLAGS.train_dir, "translate.ckpt")
 
         if MAP_dev > model.best_map.eval():
@@ -238,18 +236,37 @@ def evaluate(tokenizer = None, vectorizer = None):
             model.saver.save(sess, checkpoint_path, global_step=model.global_step.eval())
         print("  step: %d perplexity: MAP dev: %.4f BLEU: %.4f" %
               (model.global_step.eval(), MAP_dev, BLEU_dev))
-        score_path = os.path.join(FLAGS.train_dir, 'scoreEvolution')
-        if not os.path.isfile(score_path):
-            with open(score_path, 'w') as out:
-                out.write("\t".join(["Global step", "MAP", "BLEU", "Vocab size", "Target Vocab Size", "Intersection Vocab size"])+"\n")
-        with open(score_path, 'a') as out:
-            out.write("\t".join([
-                str(model.global_step.eval()), str(MAP_dev), str(BLEU_dev), str(vocab_eval[0][1]), str(vocab_eval[1][1]), str(vocab_eval[2][1])
-            ]) + "\n")
 
 
-
-
+def evaluateDataset(model, sess, tokenizer, vectorizer, ds):
+    evaluators = [BLEUEvaluator(),
+                  MAPEvaluator(),
+                  PersisterEvaluator(
+                      os.path.join(FLAGS.train_dir, 'responseEvolution-%s-%s' % (ds, model.global_step.eval()))),
+                  VocabularyEvaluator(),
+                  MAPEvaluatorSummed(),
+                  LengthEvaluator(),
+                  TTREvaluator()]
+    visitDatasetParameterized(sess, model, tokenizer, vectorizer, ds, evaluators)
+    MAP = evaluators[1].results()
+    BLEU = evaluators[0].results()
+    ## Persister evaluator saves in a different file, so just call results()
+    evaluators[2].results()
+    vocab_eval = evaluators[3].results()
+    MAP_SUMMED = evaluators[4].results()
+    LENGTH = evaluators[5].results()
+    TTR = evaluators[6].results()
+    score_path = os.path.join(FLAGS.train_dir, 'scoreEvolution-%s' % ds)
+    if not os.path.isfile(score_path):
+        with open(score_path, 'w') as out:
+            out.write("\t".join(
+                ["Global step", "MAP", "MAP_SUMMED", "BLEU", "Vocab size", "Target Vocab Size", "Intersection Vocab size", "LENGTH", "TTR"]) + "\n")
+    with open(score_path, 'a') as out:
+        out.write("\t".join([
+            str(model.global_step.eval()), str(MAP), str(MAP_SUMMED), str(BLEU), str(vocab_eval[0][1]), str(vocab_eval[1][1]),
+            str(vocab_eval[2][1]), str(LENGTH), str(TTR)
+        ]) + "\n")
+    return MAP, BLEU
 
 
 def decode(sess):
@@ -305,7 +322,7 @@ ql_home = "/home/martin/data/qatarliving"
 ql_sets = {}
 ql_sets['dev'] = os.path.join(ql_home, "dev/SemEval2016-Task3-CQA-QL-dev-subtaskA-with-multiline.xml")
 ql_sets['train'] = os.path.join(ql_home, "train/SemEval2016-Task3-CQA-QL-train-part1-subtaskA-with-multiline.xml")
-ql_sets['test'] = os.path.join(ql_home, "test/SemEval2016-Task3-CQA-QL-test-subtaskA-with-multiline-input.xml")
+ql_sets['test'] = os.path.join(ql_home, "test/SemEval2016-Task3-CQA-QL-test-subtaskA-with-multiline.xml")
 
 def visitDatasetParameterized(sess, model, tokenizer, vectorizer, ds, evaluators = []):
     for (q, answers) in QLXMLReaderPy.read(ql_sets[ds]):

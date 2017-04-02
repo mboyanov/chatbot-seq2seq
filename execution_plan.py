@@ -14,6 +14,7 @@ class ExecutionPlan:
 
     def getData(self, step):
         if step < self.udc_steps:
+            print("Training with udc at step %i out of %i steps" % (step, self.udc_steps))
             questions_train, answers_train, questions_dev, answers_dev, _, _, _, = data_utils_udc.prepare_data(
                 self.udc_path, self.vocab_size, 'udc')
             if 'ql' in self.current_data:
@@ -22,6 +23,7 @@ class ExecutionPlan:
                 self.current_data['udc'] = read_data(questions_dev, answers_dev, self.buckets), read_data(questions_train, answers_train, self.buckets)
             return self.current_data['udc']
         else:
+            print("Training with ql")
             questions_train, answers_train, questions_dev, answers_dev, _, _, _, = data_utils_udc.prepare_data(
                 self.ql_path, self.vocab_size, 'ql')
             if 'udc' in self.current_data:

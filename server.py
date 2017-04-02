@@ -1,9 +1,9 @@
 from flask import Flask
-from chatbot import decode
+from chatbot import decode, FLAGS
 import tensorflow as tf
 from flask import request
 from flask.ext.cors import CORS, cross_origin
-
+import os
 
 import json
 app = Flask(__name__)
@@ -17,6 +17,10 @@ def bot():
     response = {
         "message": responder(msg)
     }
+    if 'uuid' in request.args:
+        chatpath = os.path.join(FLAGS.train_dir, "%s.chat" % request.args.get('uuid'))
+        with open(chatpath, 'a') as out:
+            out.write("User: %s\nQLBot: %s\n" % (msg, response['message']))
     return json.dumps(response)
 
 

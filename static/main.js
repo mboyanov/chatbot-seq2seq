@@ -9,10 +9,22 @@ var messages = [], //array that hold the record of each string in chat
   botName = 'QLBot'; //name of the chatbot
 //
 
+function guid() {
+  function s4() {
+    return Math.floor((1 + Math.random()) * 0x10000)
+      .toString(16)
+      .substring(1);
+  }
+  return s4() + s4() + '-' + s4() + '-' + s4() + '-' +
+    s4() + '-' + s4() + s4() + s4();
+}
+
+var uuid = guid();
+
 //edit this function to change what the chatbot says
 function chatbotResponse(user_message) {
   botMessage = "I'm confused"; //the default message
-  $.getJSON( "http://localhost:5000", {"message": user_message}, function( data ) {
+  $.getJSON( "http://130.204.203.149:5000", {"message": user_message, "uuid": uuid}, function( data ) {
     botMessage = data['message'];
     userMessage = "<p class='triangle-border left'><b>You:</b> " + user_message + "</p>"
     $('#entries').append(userMessage);

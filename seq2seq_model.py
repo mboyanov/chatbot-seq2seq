@@ -55,7 +55,8 @@ class Seq2SeqModel(object):
                  use_lstm=False,
                  num_samples=512,
                  forward_only=False,
-                 dtype=tf.float32):
+                 dtype=tf.float32,
+                 dropout=0):
         """Create the model.
 
         Args:
@@ -119,6 +120,8 @@ class Seq2SeqModel(object):
         single_cell = tf.nn.rnn_cell.GRUCell(size)
         if use_lstm:
             single_cell = tf.nn.rnn_cell.BasicLSTMCell(size)
+        if dropout > 0:
+            single_cell = tf.nn.rnn_cell.DropoutWrapper(single_cell, input_keep_prob=1-dropout)
         cell = single_cell
         if num_layers > 1:
             cell = tf.nn.rnn_cell.MultiRNNCell([single_cell] * num_layers)

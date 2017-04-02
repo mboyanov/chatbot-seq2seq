@@ -40,7 +40,7 @@ EOS_ID = 2
 UNK_ID = 3
 
 default_tokenizer = Tokenizer(_UNK)
-bpe_tokenizer = BPETokenizer(open("/home/martin/projects/subword-nmt/vocab_bpe"), _START_VOCAB)
+bpe_tokenizer = BPETokenizer(open("/home/martin/projects/subword-nmt/vocab_bpe_merged"), _START_VOCAB)
 
 
 def create_vocabulary(vocabulary_path, data_path, max_vocabulary_size, dataset_reader,
@@ -219,4 +219,7 @@ def getReadersByDatasetType(dataset_type):
 
 
 # r1, r2 = getReadersByDatasetType('ql')
-# create_vocabulary('/tmp/vocab', '/home/martin/data/qatarliving/matchedPairs_ver5/matchPairs_B/train.csv', 999999999, r1, persist_counts=True)
+# r3, r4 = getReadersByDatasetType('udc')
+#
+# create_vocabulary('/tmp/vocab_ql', '/home/martin/data/qatarliving/matchedPairs_ver5/train.csv', 999999999, r1, persist_counts=True)
+# create_vocabulary('/tmp/vocab_udc', '/home/martin/data/udc/train.csv', 999999999, r3, persist_counts=True)
