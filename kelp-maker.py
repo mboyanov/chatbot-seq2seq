@@ -72,7 +72,7 @@ def persistResponses(responses, fn):
     order = []
     with open('%s-hyp' % fn, 'w') as hyp_out, open('%s-ref' % fn, 'w') as ref_out, open('%s-info' % fn,
                                                                                         'w') as info_out:
-        for id, (hyp, ref) in responses.items():
+        for id, (hyp, ref, _) in responses.items():
             hyp_out.write(hyp + "\n")
             ref_out.write(ref + "\n")
             info_out.write("\t".join([id, hyp, ref]) + "\n")
