@@ -93,6 +93,9 @@ _buckets = [(5, 10), (10, 15), (20, 25), (40,45)]
 def create_model(session, forward_only):
   """Create translation model and initialize or load parameters in session."""
   dtype = tf.float16 if FLAGS.use_fp16 else tf.float32
+  dropout = 0.3
+  if forward_only:
+      dropout = 0
   model = seq2seq_model.Seq2SeqModel(
       FLAGS.en_vocab_size + 257,
       _buckets,
@@ -104,7 +107,7 @@ def create_model(session, forward_only):
       FLAGS.learning_rate_decay_factor,
       forward_only=forward_only,
       dtype=dtype,
-      dropout=0.3)
+      dropout=dropout)
   ckpt = tf.train.get_checkpoint_state(FLAGS.train_dir)
   if ckpt:
     print("Reading model parameters from %s" % ckpt.model_checkpoint_path)
@@ -118,7 +121,25 @@ def create_model(session, forward_only):
 from execution_plan import ExecutionPlan
 
 def train():
-    execution_plan = ExecutionPlan('/home/martin/data/udc/', os.path.join(ql_home, 'matchedPairs_ver5/'), 50000, 50000, FLAGS.en_vocab_size, _buckets)
+    execution_plan = ExecutionPlan('/home/martin/data/udc/',
+                                   os.path.join(ql_home, 'matchedPairs_ver5/'),
+                                   0,
+                                   0,
+                                   FLAGS.en_vocab_size,
+                                   _buckets, [{
+                                        "num_steps": 0,
+                                        "path": "/home/martin/data/udc/",
+                                        "ds": "udc"
+                                   },
+                                   {
+                                       "num_steps": 0,
+                                       "path": os.path.join(ql_home, 'matchedPairs_ver5/'),
+                                       "ds": "ql"
+                                   }, {
+                                        "num_steps": 50000,
+                                        "path": "/mnt/8C24EDC524EDB1FE/data/friends/",
+                                        "ds": "friends"
+                                    }])
     questions_train, answers_train, questions_dev, answers_dev, _, _, _, = data_utils_udc.prepare_data(
         FLAGS.data_dir, FLAGS.en_vocab_size, FLAGS.dataset_type)
     print("reading dictionaries")

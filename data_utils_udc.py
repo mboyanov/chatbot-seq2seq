@@ -20,12 +20,13 @@ from __future__ import print_function
 
 import os
 
-from tensorflow.python.platform import gfile
 from UDCDatasetReader import UDCDatasetReader
 from QLDatasetReader import QLDatasetReader, FilteredDatasetReader
 from sklearn.feature_extraction.text import TfidfVectorizer
 import numpy as np
 from tokenizer.tokenizer import Tokenizer, BPETokenizer
+import pickle
+from bm25 import BM25
 
 # Special vocabulary symbols - we always put them at the start.
 _PAD = b"_PAD"
@@ -60,10 +61,10 @@ def create_vocabulary(vocabulary_path, data_path, max_vocabulary_size, dataset_r
       dataset_reader: used to read the dataset
       tokenizer: a function to use to tokenize each data sentence;
     """
-    if not gfile.Exists(vocabulary_path):
+    if not os.path.isfile(vocabulary_path):
         print("Creating vocabulary %s from data %s" % (vocabulary_path, data_path))
         vocab_list = tokenizer.fit(dataset_reader.conversations(data_path), max_vocabulary_size, _START_VOCAB)
-        with gfile.GFile(vocabulary_path, mode="wb") as vocab_file:
+        with open(vocabulary_path, mode="wb") as vocab_file:
             for w in vocab_list:
                 if persist_counts:
                     vocab_file.write(str(w[0]) +" " + str(w[1]) + "\n")
@@ -92,9 +93,9 @@ def initialize_tokenizer(vocabulary_path, is_bpe=True):
     """
     if is_bpe:
         return bpe_tokenizer
-    if gfile.Exists(vocabulary_path):
+    if os.path.isfile(vocabulary_path):
         rev_vocab = []
-        with gfile.GFile(vocabulary_path, mode="rb") as f:
+        with open(vocabulary_path, mode="r") as f:
             rev_vocab.extend(f.readlines())
         rev_vocab = [line.strip() for line in rev_vocab]
         return Tokenizer(_UNK, vocab_list=rev_vocab)
@@ -139,15 +140,15 @@ def data_to_token_ids(data_path, questions_path, answers_path, vocabulary_path, 
       tokenizer: a function to use to tokenize each sentence;
       normalize_digits: Boolean; if true, all digits are replaced by 0s.
     """
-    if gfile.Exists(questions_path) and gfile.Exists(answers_path):
+    if os.path.isfile(questions_path) and os.path.isfile(answers_path):
         print("files already tokenized")
         return
     print("Tokenizing data in %s" % data_path)
     tokenizer = initialize_tokenizer(vocabulary_path)
     lengths_q = []
     lengths_a = []
-    with gfile.GFile(questions_path, mode="w") as questions_tokens_file:
-        with gfile.GFile(answers_path, mode="w") as answers_tokens_file:
+    with open(questions_path, mode="w") as questions_tokens_file:
+        with open(answers_path, mode="w") as answers_tokens_file:
             for q, a in dataset_reader.conversations(data_path):
                 token_ids = sentence_to_token_ids(q, tokenizer)
                 token_ids_answer = sentence_to_token_ids(a, tokenizer)
@@ -200,18 +201,41 @@ def prepare_data(data_dir, vocabulary_size, dataset_type, tokenizer=default_toke
 
 def tfidfVectorizer(data_dir, vocab, dataset_type, tokenizer=default_tokenizer.tokenize):
     train_path = os.path.join(data_dir, 'train.csv')
+    if os.path.isfile(train_path+".vectorizer"):
+        return pickle.load(open(train_path+".vectorizer", 'rb'))
     train_dataset_reader, _ = getReadersByDatasetType(dataset_type)
     answers = []
     for (q, a) in train_dataset_reader.conversations(train_path):
         answers.append(a)
     vectorizer = TfidfVectorizer(vocabulary=vocab, tokenizer=tokenizer)
     vectorizer.fit(answers)
+    pickle.dump(vectorizer, open(train_path + ".vectorizer", 'wb'))
     return vectorizer
+
+
+
+def bm25(data_dir, dataset_type, tokenizer=default_tokenizer):
+    train_path = os.path.join(data_dir, 'train.csv')
+    if os.path.isfile(train_path+".bm25"):
+        bm25= pickle.load(open(train_path+".bm25", 'rb'))
+        return bm25
+    train_dataset_reader, _ = getReadersByDatasetType(dataset_type)
+    answers = []
+    for (q, a) in train_dataset_reader.conversations(train_path):
+        answers.append(a)
+    bm25 = BM25(tokenizer)
+    bm25.fit(answers)
+    pickle.dump(bm25, open(train_path + ".bm25", 'wb'))
+    return bm25
 
 
 def getReadersByDatasetType(dataset_type):
     if (dataset_type == 'udc'):
         return UDCDatasetReader(True), UDCDatasetReader(False)
+    elif dataset_type == 'friends':
+        from friendsHTMLReader import FriendsHTMLReader
+        reader = FriendsHTMLReader()
+        return reader, reader
     else:
         #filteredReader = FilteredDatasetReader()
         qlReader = QLDatasetReader()
@@ -221,5 +245,7 @@ def getReadersByDatasetType(dataset_type):
 # r1, r2 = getReadersByDatasetType('ql')
 # r3, r4 = getReadersByDatasetType('udc')
 #
-# create_vocabulary('/tmp/vocab_ql', '/home/martin/data/qatarliving/matchedPairs_ver5/train.csv', 999999999, r1, persist_counts=True)
+#r1, r2 = getReadersByDatasetType('friends')
+##
+#create_vocabulary('/tmp/vocab_friends', '/mnt/8C24EDC524EDB1FE/data/friends/', 999999999, r1, persist_counts=True)
 # create_vocabulary('/tmp/vocab_udc', '/home/martin/data/udc/train.csv', 999999999, r3, persist_counts=True)

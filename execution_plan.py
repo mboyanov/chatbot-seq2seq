@@ -2,7 +2,20 @@ import data_utils_udc
 import trainingFilesReader
 class ExecutionPlan:
 
-    def __init__(self, udc_path, ql_path, udc_steps, ql_steps, vocab_size, _buckets):
+    def __init__(self, udc_path, ql_path, udc_steps, ql_steps, vocab_size, _buckets, more_steps = []):
+        self.steps = [
+            {
+                "ds": "udc",
+                "num_steps": udc_steps,
+                "path": udc_path
+            },
+            {
+                "ds": "ql",
+                "num_steps": ql_steps,
+                "path": ql_path
+            }
+
+        ] + more_steps
         self.udc_path = udc_path
         self.ql_path = ql_path
         self.udc_steps = udc_steps
@@ -13,24 +26,16 @@ class ExecutionPlan:
 
 
     def getData(self, step):
-        if step < self.udc_steps:
-            print("Training with udc at step %i out of %i steps" % (step, self.udc_steps))
-            questions_train, answers_train, questions_dev, answers_dev, _, _, _, = data_utils_udc.prepare_data(
-                self.udc_path, self.vocab_size, 'udc')
-            if 'ql' in self.current_data:
-                del self.current_data['ql']
-            if 'udc' not in self.current_data:
-                self.current_data['udc'] = read_data(questions_dev, answers_dev, self.buckets), read_data(questions_train, answers_train, self.buckets)
-            return self.current_data['udc']
-        else:
-            print("Training with ql")
-            questions_train, answers_train, questions_dev, answers_dev, _, _, _, = data_utils_udc.prepare_data(
-                self.ql_path, self.vocab_size, 'ql')
-            if 'udc' in self.current_data:
-                del self.current_data['udc']
-            if 'ql' not in self.current_data:
-                self.current_data['ql'] = read_data(questions_dev, answers_dev, self.buckets), read_data(questions_train, answers_train, self.buckets)
-            return self.current_data['ql']
+        acccumulated_step = 0
+        for current_step in self.steps:
+            if acccumulated_step <= step < acccumulated_step + current_step['num_steps']:
+                print("training with %s at step %i out of %i steps" %
+                      (current_step['ds'], step - acccumulated_step, current_step['num_steps']))
+                questions_train, answers_train, questions_dev, answers_dev, _, _, _, = data_utils_udc.prepare_data(
+                    current_step['path'], self.vocab_size, current_step['ds'])
+                if current_step['ds'] not in self.current_data:
+                    self.current_data[current_step['ds']] = read_data(questions_dev, answers_dev, self.buckets), read_data(questions_train, answers_train, self.buckets)
+                return self.current_data[current_step['ds']]
 
 
 def read_data(source_path, target_path, _buckets, max_size=None):
