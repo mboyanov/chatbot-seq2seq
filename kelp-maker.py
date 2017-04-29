@@ -16,23 +16,23 @@ configs = [
         'inOutPair': (
             os.path.join(kelp_files_home, 'SemEval2016-Task3-CQA-QL-train-part1-with-multiline.xml.taskA.klp'),
             os.path.join(kelp_files_home,
-                         'v3-SemEval2016-Task3-CQA-QL-train-part1-with-multiline-with-bot.xml.taskA.klp')),
+                         'v4-SemEval2016-Task3-CQA-QL-train-part1-with-multiline-with-bot.xml.taskA.klp')),
         'responsesFile': '/home/martin/projects/machine-translation-scoring/train'
     },
-    {
-        'xml': os.path.join(ql_home, 'dev/SemEval2016-Task3-CQA-QL-dev-subtaskA-with-multiline.xml'),
-        'inOutPair': (os.path.join(kelp_files_home, 'SemEval2016-Task3-CQA-QL-dev-with-multiline.xml.taskA.klp'),
-                      os.path.join(kelp_files_home,
-                                   'v3-SemEval2016-Task3-CQA-QL-dev-with-multiline-with-bot.xml.taskA.klp')),
-        'responsesFile': '/home/martin/projects/machine-translation-scoring/v3-dev'
-    },
-    {
-        'xml': os.path.join(ql_home, 'test/SemEval2016-Task3-CQA-QL-test-subtaskA-with-multiline.xml'),
-        'inOutPair': (os.path.join(kelp_files_home, 'SemEval2016-Task3-CQA-QL-test-with-multiline.xml.taskA.klp'),
-                      os.path.join(kelp_files_home,
-                                   'v3-SemEval2016-Task3-CQA-QL-test-with-multiline-with-bot.xml.taskA.klp')),
-        'responsesFile': '/home/martin/projects/machine-translation-scoring/test'
-    }
+    # {
+    #     'xml': os.path.join(ql_home, 'dev/SemEval2016-Task3-CQA-QL-dev-subtaskA-with-multiline.xml'),
+    #     'inOutPair': (os.path.join(kelp_files_home, 'SemEval2016-Task3-CQA-QL-dev-with-multiline.xml.taskA.klp'),
+    #                   os.path.join(kelp_files_home,
+    #                                'v4-SemEval2016-Task3-CQA-QL-dev-with-multiline-with-bot.xml.taskA.klp')),
+    #     'responsesFile': '/home/martin/projects/machine-translation-scoring/v3-dev'
+    # },
+    # {
+    #     'xml': os.path.join(ql_home, 'test/SemEval2016-Task3-CQA-QL-test-subtaskA-with-multiline.xml'),
+    #     'inOutPair': (os.path.join(kelp_files_home, 'SemEval2016-Task3-CQA-QL-test-with-multiline.xml.taskA.klp'),
+    #                   os.path.join(kelp_files_home,
+    #                                'v4-SemEval2016-Task3-CQA-QL-test-with-multiline-with-bot.xml.taskA.klp')),
+    #     'responsesFile': '/home/martin/projects/machine-translation-scoring/test'
+    # }
 ]
 
 data_dir = os.path.join(ql_home, 'matchedPairs_ver5')
@@ -52,7 +52,7 @@ def computeSimilarities(answers, response, vectorizer=default_vectorizer):
     return [1 - x for x in distances[0]]
 
 
-def generateHypothesisReferences(responder, dp):
+def generateHypothesisReferences(responder, responder_multiple, dp):
     """
 
     :param responder:
@@ -62,9 +62,10 @@ def generateHypothesisReferences(responder, dp):
     responses = {}
     for q, answers in reader.read(dp):
         response = responder(q)
-        for a in answers:
-            response_to_comment = responder(a[0])
-            responses[a[2]] = response, a[0], response_to_comment
+        answers_text = [a[0] for a in answers]
+        responses_to_comments = responder_multiple(answers_text)
+        for a,rc in zip(answers, responses_to_comments):
+            responses[a[2]] = response, a[0], rc
     return responses
 
 
@@ -88,12 +89,19 @@ def getSimilarities(responses, dp):
     similarities = defaultdict(dict)
     for q, answers in reader.read(dp):
         response = responses[answers[0][2]][0]
+        responses_to_comments = [responses[a[2]][2] for a in answers]
         sims = computeSimilarities([a[0] for a in answers], response)
         addSimilarityFeatures(answers, sims, similarities, 'tfidf-cosine')
         sims2 = bm25.transform(response, [a[0] for a in answers])
         addSimilarityFeatures(answers, sims2, similarities, 'bm25')
         embedding_similarities = computeSimilarities([a[0] for a in answers], response,  embedding_vectorizer)
         addSimilarityFeatures(answers, embedding_similarities, similarities, 'embeddings')
+        tfidf_generated_question_sims = computeSimilarities(responses_to_comments, q)
+        addSimilarityFeatures(answers, tfidf_generated_question_sims, similarities, 'tfidf-cosine-generated-question')
+        bm25_generated_question_sims = bm25.transform(q, responses_to_comments)
+        addSimilarityFeatures(answers, bm25_generated_question_sims, similarities, 'bm25-generated-question')
+        embedding_similarities_generated_question = computeSimilarities(responses_to_comments, q, embedding_vectorizer)
+        addSimilarityFeatures(answers, embedding_similarities_generated_question, similarities, 'embeddings-generated-question')
     return similarities
 
 
@@ -154,17 +162,45 @@ from chatbot import decode
 
 
 
-active_features = ["tfidf-cosine", "tfidf-cosine-rank", "bm25", "bm25-rank", 'embeddings', 'embeddings-rank']
+active_features = ["tfidf-cosine",
+                   "tfidf-cosine-rank",
+                   "bm25",
+                   "bm25-rank",
+                   'embeddings',
+                   'embeddings-rank',
+                   "tfidf-cosine-generated-question",
+                   "tfidf-cosine-generated-question-rank",
+                   "bm25-generated-question",
+                   "bm25-generated-question-rank",
+                   "embeddings-generated-question",
+                   "embeddings-generated-question-rank"]
+
+feature_combinations = [
+    ["tfidf-cosine",
+     "tfidf-cosine-rank"],
+    ["bm25",
+     "bm25-rank"],
+    ['embeddings',
+     'embeddings-rank'],
+    ["tfidf-cosine-generated-question",
+     "tfidf-cosine-generated-question-rank"],
+    ["bm25-generated-question",
+     "bm25-generated-question-rank"],
+    ["embeddings-generated-question",
+     "embeddings-generated-question-rank"]
+]
+
+
 with tf.Session() as sess:
-    responder = decode(sess)
+    responder, responder_multiple = decode(sess)
     for config in configs:
         print("Processing %s" % config['xml'])
-        responses = generateHypothesisReferences(responder, config['xml'])
+        responses = generateHypothesisReferences(responder, responder_multiple, config['xml'])
         print("Hypotheses generated %s" % config['xml'])
         hyp_file, ref_file, order = persistResponses(responses, config['responsesFile'])
         print("Hypotheses persisted %s" % config['xml'])
         similarity_features = getSimilarities(responses, config['xml'])
-        mt_features = getMachineTranslationFeatures(hyp_file, ref_file, order)
+   #     mt_features = getMachineTranslationFeatures(hyp_file, ref_file, order)
         print("Similarities computed %s" % config['xml'])
         inOutPair = config['inOutPair']
         with open(inOutPair[0]) as kelp_in, open(inOutPair[1], 'w') as kelp_out:
@@ -175,7 +211,11 @@ with tf.Session() as sess:
                     continue
                 feature_dict = similarity_features[c_id]
                 feature_list = [feature_dict[x] for x in active_features]
-                feature_list.extend(mt_features[c_id])
+        #        feature_list.extend(mt_features[c_id])
+                for feature_combination in feature_combinations:
+                    line_plus_feature_combination = add_features([feature_dict[x] for x in feature_combination], line)
+                    with open(inOutPair[1]+"."+feature_combination[0], 'a') as kelp_out_feature_combination:
+                        kelp_out_feature_combination.write(line_plus_feature_combination)
                 line_plus = add_features(feature_list, line)
                 kelp_out.write(line_plus)
         print("Kelp files written %s" % config['xml'])

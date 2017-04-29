@@ -25,7 +25,7 @@ import numpy as np
 from six.moves import xrange  # pylint: disable=redefined-builtin
 import tensorflow as tf
 
-from tensorflow.models.rnn.translate import data_utils
+import data_utils_udc as data_utils
 
 
 class Seq2SeqModel(object):
@@ -260,7 +260,7 @@ class Seq2SeqModel(object):
         else:
             return None, outputs[0], outputs[1:]  # No gradient norm, loss, outputs.
 
-    def get_batch(self, data, bucket_id):
+    def get_batch(self, data, bucket_id, in_order = False):
         """Get a random batch of data from the specified bucket, prepare for step.
 
         To feed data in step(..) it must be a list of batch-major vectors, while
@@ -271,6 +271,7 @@ class Seq2SeqModel(object):
           data: a tuple of size len(self.buckets) in which each element contains
             lists of pairs of input and output data that we use to create a batch.
           bucket_id: integer, which bucket to get the batch for.
+          in_order: if True, will traverse data as a list, else it will sample randomly
 
         Returns:
           The triple (encoder_inputs, decoder_inputs, target_weights) for
@@ -281,8 +282,11 @@ class Seq2SeqModel(object):
 
         # Get a random batch of encoder and decoder inputs from data,
         # pad them if needed, reverse encoder inputs and add GO to decoder.
-        for _ in xrange(self.batch_size):
-            encoder_input, decoder_input = random.choice(data[bucket_id])
+        for i in xrange(self.batch_size):
+            if (in_order):
+                encoder_input, decoder_input = data[bucket_id][i]
+            else:
+                encoder_input, decoder_input = random.choice(data[bucket_id])
             # Encoder inputs are padded and then reversed.
             encoder_pad = [data_utils.PAD_ID] * (encoder_size - len(encoder_input))
             encoder_inputs.append(list(reversed(encoder_input + encoder_pad)))

@@ -293,12 +293,15 @@ def evaluateDataset(model, sess, tokenizer, vectorizer, ds):
 def decode(sess):
     # Create model and load parameters.
     model = create_model(sess, True)
-    model.batch_size = 1  # We decode one sentence at a time.
     tokenizer = getVocabularies()
 
     def responder(sentence):
-        return evalSentence(sentence,model, tokenizer, sess)
-    return responder
+        return generateResponse(sentence, model, tokenizer, sess)
+
+    def responderMultiple(sentences):
+        return generateMultipleResponses(sentences, model, tokenizer, sess)
+
+    return responder, responderMultiple
 
 
 
@@ -309,7 +312,7 @@ def getVocabularies():
     return data_utils_udc.initialize_tokenizer(vocab_path)
 
 
-def evalSentence(sentence, model, tokenizer, sess):
+def generateResponse(sentence, model, tokenizer, sess):
   # Get token-ids for the input sentence.
   token_ids = data_utils_udc.sentence_to_token_ids(sentence, tokenizer)
   if (token_ids is None):
@@ -338,6 +341,38 @@ def evalSentence(sentence, model, tokenizer, sess):
   return tokenizer.inverse_transform(outputs)
 
 
+def generateMultipleResponses(sentences, model, tokenizer, sess):
+    token_ids = [(data_utils_udc.sentence_to_token_ids(sentence, tokenizer), i) for i, sentence in enumerate(sentences)]
+    from collections import defaultdict
+    sentences_by_buckets = defaultdict(list)
+
+    for sentenceOrderPair in token_ids:
+        bucket_id = len(_buckets) - 1
+        for i, bucket in enumerate(_buckets):
+            if bucket[0] >= len(sentenceOrderPair[0]):
+                bucket_id = i
+                break
+        sentences_by_buckets[bucket_id].append(sentenceOrderPair)
+    result = {}
+    for bucket_id, sentences in sentences_by_buckets.items():
+        for i in range(len(sentences) // model.batch_size + 1):
+            batch = sentences[i * model.batch_size: min((i + 1) * model.batch_size, len(sentences))]
+            batch_sentences = [(a[0], []) for a in batch]
+            old_batch_size = model.batch_size
+            model.batch_size = len(batch)
+            encoder_inputs, decoder_inputs, target_weights = model.get_batch({bucket_id: batch_sentences}, bucket_id,
+                                                                             in_order=True)
+            _, _, output_logits = model.step(sess, encoder_inputs, decoder_inputs, target_weights, bucket_id, True)
+            model.batch_size = old_batch_size
+            outputs = np.argmax(output_logits, axis=2).T
+            for batch_entry, output in zip(batch, outputs):
+                output = output.tolist()
+                if data_utils_udc.EOS_ID in output:
+                    output = output[:output.index(data_utils_udc.EOS_ID)]
+                result[batch_entry[1]] = tokenizer.inverse_transform(output)
+    return [x[1] for x in sorted(result.items(), key=lambda x: x[0])]
+
+
 
 ql_home = "/home/martin/data/qatarliving"
 ql_sets = {}
@@ -346,11 +381,14 @@ ql_sets['train'] = os.path.join(ql_home, "train/SemEval2016-Task3-CQA-QL-train-p
 ql_sets['test'] = os.path.join(ql_home, "test/SemEval2016-Task3-CQA-QL-test-subtaskA-with-multiline.xml")
 
 def visitDatasetParameterized(sess, model, tokenizer, vectorizer, ds, evaluators = []):
+    questionAnswers = []
     for (q, answers) in QLXMLReaderPy.read(ql_sets[ds]):
         correct = [a[1] for a in answers]
         if sum(correct) == 0:
             continue
-        response = evalSentence(q, model, tokenizer, sess)
+        questionAnswers.append((q, answers))
+    generated_responses = generateMultipleResponses([questionAnswer[0] for questionAnswer in questionAnswers], model, tokenizer, sess)
+    for response, (q, answers) in zip(generated_responses, questionAnswers):
         for evaluator in evaluators:
             evaluator.update(q, response, answers, vectorizer)
 
@@ -378,7 +416,7 @@ def main(_):
         explore()
     if FLAGS.decode:
         with tf.Session() as sess:
-            responder = decode(sess)
+            responder, _ = decode(sess)
             # Decode from standard input.
             sys.stdout.write("> ")
             sys.stdout.flush()

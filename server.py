@@ -29,6 +29,6 @@ def responder(s):
 
 if __name__ == "__main__":
     with tf.Session() as sess:
-        responder = decode(sess)
+        responder, _ = decode(sess)
         app.run(host="0.0.0.0")
 
