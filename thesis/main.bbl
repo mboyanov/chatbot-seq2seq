@@ -16,6 +16,40 @@
   {}
 \endgroup
 
+\entry{eliza}{article}{}
+  \name{author}{1}{}{%
+    {{}%
+     {Weizenbaum}{W.}%
+     {Joseph}{J.}%
+     {}{}%
+     {}{}}%
+  }
+  \list{publisher}{1}{%
+    {ACM}%
+  }
+  \strng{namehash}{WJ1}
+  \strng{fullhash}{WJ1}
+  \field{sortinit}{W}
+  \verb{doi}
+  \verb 10.1145/365153.365168
+  \endverb
+  \field{issn}{0001-0782}
+  \field{number}{1}
+  \field{pages}{36\bibrangedash 45}
+  \field{title}{ELIZA\&Mdash;a Computer Program for the Study of Natural
+  Language Communication Between Man and Machine}
+  \verb{url}
+  \verb http://doi.acm.org/10.1145/365153.365168
+  \endverb
+  \field{volume}{9}
+  \list{location}{1}{%
+    {New York, NY, USA}%
+  }
+  \field{journaltitle}{Commun. ACM}
+  \field{month}{01}
+  \field{year}{1966}
+\endentry
+
 \lossort
 \endlossort
 

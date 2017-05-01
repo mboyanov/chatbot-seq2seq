@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.14159265-2.6-1.40.16 (TeX Live 2015/Debian) (preloaded format=pdflatex 2017.4.23)  26 APR 2017 22:46
+This is pdfTeX, Version 3.14159265-2.6-1.40.16 (TeX Live 2015/Debian) (preloaded format=pdflatex 2017.4.23)  30 APR 2017 21:16
 entering extended mode
  restricted \write18 enabled.
  %&-line parsing enabled.
@@ -2088,14 +2088,14 @@ Package microtype Info: Loading generic settings for font family
 (microtype)             See the microtype manual for details.
 
 1: section
-<Figures/logo_su.jpg, id=105, 66.2475pt x 81.30376pt>
+<Figures/logo_su.jpg, id=133, 66.2475pt x 81.30376pt>
 File: Figures/logo_su.jpg Graphic file (type jpg)
 
 <use Figures/logo_su.jpg>
 Package pdftex.def Info: Figures/logo_su.jpg used on input line 103.
 (pdftex.def)             Requested size: 66.24733pt x 81.30354pt.
 
-<Figures/logo_katedra.jpg, id=106, 60.225pt x 64.74188pt>
+<Figures/logo_katedra.jpg, id=134, 60.225pt x 64.74188pt>
 File: Figures/logo_katedra.jpg Graphic file (type jpg)
 
 <use Figures/logo_katedra.jpg>
@@ -2152,25 +2152,45 @@ Underfull \hbox (badness 2142) in paragraph at lines 15--15
 []\T2A/cmr/bx/n/17.28 Диалогови системи: мотивация и
  []
 
-
-Underfull \hbox (badness 10000) in paragraph at lines 30--30
-[]\T2A/cmr/bx/n/17.28 Отговаряне на често задавани
- []
-
-)
 1: section
 [4
 
 
 
 ]
+LaTeX Font Info:    Try loading font information for T2A+cmtt on input line 23.
+
+ (/usr/share/texlive/texmf-dist/tex/latex/cyrillic/t2acmtt.fd
+File: t2acmtt.fd 2001/08/11 v1.0a Computer Modern Cyrillic font definitions
+)
+Package microtype Info: Loading generic settings for font family
+(microtype)             `cmtt' (encoding: T2A).
+(microtype)             For optimal results, create family-specific settings.
+(microtype)             See the microtype manual for details.
+
+<Figures/eliza.png, id=200, 434.37282pt x 286.82156pt>
+File: Figures/eliza.png Graphic file (type png)
+ <use Figures/eliza.png>
+Package pdftex.def Info: Figures/eliza.png used on input line 40.
+(pdftex.def)             Requested size: 434.37175pt x 286.82085pt.
+
+Overfull \hbox (171.82237pt too wide) in paragraph at lines 40--41
+[][]\T2A/cmr/m/n/12 (-20) [caption="ELIZA"] 
+ []
+
+
+Underfull \hbox (badness 10000) in paragraph at lines 54--54
+[]\T2A/cmr/bx/n/17.28 Отговаряне на често задавани
+ []
+
+) [5] [6 <./Figures/eliza.png>]
 \openout2 = `Chapters/Chapter3.aux'.
 
  (./Chapters/Chapter3.tex
 Chapter 3.
 )
 1: section
-[5
+[7
 
 
 
@@ -2181,7 +2201,7 @@ Chapter 3.
 Chapter 4.
 )
 1: section
-[6
+[8
 
 
 
@@ -2197,31 +2217,29 @@ Underfull \hbox (badness 10000) in paragraph at lines 7--7
 
 )
 1: section
-[7
+[9
 
 
 
 ]
+Chapter 6.
+1: section
+[10
 
-LaTeX Warning: Empty bibliography on input line 148.
 
+]
 \openout2 = `Chapters/Applications.aux'.
 
-(./Chapters/Applications.tex
-Chapter 6.
+ (./Chapters/Applications.tex
+Chapter 7.
 )
 1: section
-[8
-
+[11
 
 
 ]
 
 Package caption Warning: Unused \captionsetup[table] on input line 35.
-See the caption package documentation for explanation.
-
-
-Package caption Warning: Unused \captionsetup[figure] on input line 36.
 See the caption package documentation for explanation.
 
 Package atveryend Info: Empty hook `BeforeClearDocument' on input line 160.
@@ -2232,34 +2250,37 @@ Package atveryend Info: Empty hook `AfterLastShipout' on input line 160.
 Package atveryend Info: Executing hook `AtVeryEndDocument' on input line 160.
 Package atveryend Info: Executing hook `AtEndAfterFileList' on input line 160.
 Package rerunfilecheck Info: File `main.out' has not changed.
-(rerunfilecheck)             Checksum: 5129C59CA67F8452C9EAA67E8FE3BA0D;4414.
+(rerunfilecheck)             Checksum: 34163280CAA75E1793029925C8FAE3AA;5219.
 Package logreq Info: Writing requests to 'main.run.xml'.
 \openout1 = `main.run.xml'.
 
  )
 (\end occurred when \iftrue on line 83 was incomplete) 
 Here is how much of TeX's memory you used:
- 51127 strings out of 494440
- 1164165 string characters out of 6173198
- 1345223 words of memory out of 5000000
- 53642 multiletter control sequences out of 15000+600000
- 17352 words of font info for 57 fonts, out of 8000000 for 9000
+ 51344 strings out of 494440
+ 1167929 string characters out of 6173198
+ 1346223 words of memory out of 5000000
+ 53797 multiletter control sequences out of 15000+600000
+ 22397 words of font info for 79 fonts, out of 8000000 for 9000
  430 hyphenation exceptions out of 8191
- 73i,19n,83p,10377b,1718s stack positions out of 5000i,500n,10000p,200000b,80000s
+ 73i,19n,83p,10377b,1724s stack positions out of 5000i,500n,10000p,200000b,80000s
 {/usr/share/texmf/fonts/e
 nc/dvips/cm-super/cm-super-t2a.enc}</usr/share/texlive/texmf-dist/fonts/type1/p
 ublic/amsfonts/cm/cmsy10.pfb></usr/share/texmf/fonts/type1/public/cm-super/sfbx
 1200.pfb></usr/share/texmf/fonts/type1/public/cm-super/sfbx1440.pfb></usr/share
 /texmf/fonts/type1/public/cm-super/sfbx1728.pfb></usr/share/texmf/fonts/type1/p
-ublic/cm-super/sfbx2488.pfb></usr/share/texmf/fonts/type1/public/cm-super/sfrm1
-200.pfb></usr/share/texmf/fonts/type1/public/cm-super/sfrm1440.pfb></usr/share/
-texmf/fonts/type1/public/cm-super/sfrm1728.pfb></usr/share/texmf/fonts/type1/pu
-blic/cm-super/sfsl1200.pfb></usr/share/texmf/fonts/type1/public/cm-super/sfti17
-28.pfb>
-Output written on main.pdf (9 pages, 185577 bytes).
+ublic/cm-super/sfbx2488.pfb></usr/share/texmf/fonts/type1/public/cm-super/sfcc1
+095.pfb></usr/share/texmf/fonts/type1/public/cm-super/sfcc1200.pfb></usr/share/
+texmf/fonts/type1/public/cm-super/sfrm1095.pfb></usr/share/texmf/fonts/type1/pu
+blic/cm-super/sfrm1200.pfb></usr/share/texmf/fonts/type1/public/cm-super/sfrm14
+40.pfb></usr/share/texmf/fonts/type1/public/cm-super/sfrm1728.pfb></usr/share/t
+exmf/fonts/type1/public/cm-super/sfsl1200.pfb></usr/share/texmf/fonts/type1/pub
+lic/cm-super/sfti1200.pfb></usr/share/texmf/fonts/type1/public/cm-super/sfti172
+8.pfb></usr/share/texmf/fonts/type1/public/cm-super/sftt1200.pfb>
+Output written on main.pdf (12 pages, 291164 bytes).
 PDF statistics:
- 223 PDF objects out of 1000 (max. 8388607)
- 192 compressed objects within 2 object streams
- 34 named destinations out of 1000 (max. 500000)
- 17639 words of extra memory for PDF output out of 20736 (max. 10000000)
+ 304 PDF objects out of 1000 (max. 8388607)
+ 262 compressed objects within 3 object streams
+ 46 named destinations out of 1000 (max. 500000)
+ 26404 words of extra memory for PDF output out of 29859 (max. 10000000)
 
