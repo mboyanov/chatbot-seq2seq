@@ -11,26 +11,26 @@ ql_home = "/home/martin/data/qatarliving"
 
 kelp_files_home = "/home/martin/projects/tutorial/"
 configs = [
-    {
-        'xml': os.path.join(ql_home, 'train/SemEval2016-Task3-CQA-QL-train-concat-with-multiline.xml'),
-        'inOutPair': (
-            os.path.join(kelp_files_home, 'SemEval2016-Task3-CQA-QL-train-part1-with-multiline.xml.taskA.klp'),
-            os.path.join(kelp_files_home,
-                         'v5-SemEval2016-Task3-CQA-QL-train-part1-with-multiline-with-bot.xml.taskA.klp')),
-        'responsesFile': '/home/martin/projects/machine-translation-scoring/train'
-    },
+    # {
+    #     'xml': os.path.join(ql_home, 'train/SemEval2016-Task3-CQA-QL-train-concat-with-multiline.xml'),
+    #     'inOutPair': (
+    #         os.path.join(kelp_files_home, 'SemEval2016-Task3-CQA-QL-train-part1-with-multiline.xml.taskA.klp'),
+    #         os.path.join(kelp_files_home,
+    #                      'v7-SemEval2016-Task3-CQA-QL-train-part1-with-multiline-with-bot.xml.taskA.klp')),
+    #     'responsesFile': '/home/martin/projects/machine-translation-scoring/train'
+    # },
     {
         'xml': os.path.join(ql_home, 'dev/SemEval2016-Task3-CQA-QL-dev-subtaskA-with-multiline.xml'),
         'inOutPair': (os.path.join(kelp_files_home, 'SemEval2016-Task3-CQA-QL-dev-with-multiline.xml.taskA.klp'),
                       os.path.join(kelp_files_home,
-                                   'v5-SemEval2016-Task3-CQA-QL-dev-with-multiline-with-bot.xml.taskA.klp')),
+                                   'v7-SemEval2016-Task3-CQA-QL-dev-with-multiline-with-bot.xml.taskA.klp')),
         'responsesFile': '/home/martin/projects/machine-translation-scoring/v3-dev'
     },
     {
         'xml': os.path.join(ql_home, 'test/SemEval2016-Task3-CQA-QL-test-subtaskA-with-multiline.xml'),
         'inOutPair': (os.path.join(kelp_files_home, 'SemEval2016-Task3-CQA-QL-test-with-multiline.xml.taskA.klp'),
                       os.path.join(kelp_files_home,
-                                   'v5-SemEval2016-Task3-CQA-QL-test-with-multiline-with-bot.xml.taskA.klp')),
+                                   'v7-SemEval2016-Task3-CQA-QL-test-with-multiline-with-bot.xml.taskA.klp')),
         'responsesFile': '/home/martin/projects/machine-translation-scoring/test'
     }
 ]
@@ -52,7 +52,10 @@ def computeSimilarities(answers, response, vectorizer=default_vectorizer):
     return [1 - x for x in distances[0]]
 
 
-def generateHypothesisReferences(responder, responder_multiple, dp):
+
+from question_extractor import QuestionExtractor
+
+def generateHypothesisReferences(responder, responder_multiple, dp, questionExtractor= lambda x: x):
     """
 
     :param responder:
@@ -107,9 +110,11 @@ def getSimilarities(responses, dp):
 
 def addSimilarityFeatures(answers, sims, similarities, label):
     sorted_by_sim = sorted(zip(answers, sims), key=lambda x: x[1], reverse=True)
+    arihmetic_rank_quotient = 1/(len(answers))
     for i, (a, sim) in enumerate(sorted_by_sim):
         similarities[a[2]][label] = sim,
-        similarities[a[2]]["%s-rank" % label] = i
+        similarities[a[2]]["%s-reciprocal-rank" % label] = 1/ (i+1)
+        similarities[a[2]]["%s-arithmetic-rank" % label] = 1 - i * arihmetic_rank_quotient
 
 
 sentence = "Good |<||BT:tree|(ROOT (S (NP (NN (massage::n))(NN (oil::n)))(VP (VBZ (be::v)))(ADVP (RB (there::r)))(NP (DT (any::d))(NN (place::n)))(NP (PRP (i::p)))(VP (MD (can::m))(VB (find::v)))(NP (VBN (scent::v))(NN (massage::n))(NNS (oils::n)))(PP (IN (in::i)))(NP (NN (qatar::n)))))|ET||BS:text|massage oil is there any place i can find scented massage oils in qatar?|ES||,||BT:tree|(ROOT (S (VP (VB (try::v)))(NP (DT (both::d)))(NP (-RRB- (}::-))(NNP (i'am::n)))(VP (RB (just::r))(VBG (try::v))(TO (to::t))(VB (be::v)))(ADJP (JJ (helpful::j))))(S (PP (IN (on::i)))(NP (DT (a::d))(JJ (serious::j))(NN (note::n)))(VP (VB (please::v))(VB (go::v)))(ADVP (RB (there::r))))(S (NP (PRP (you::p)))(VP (MD ('ll::m))(VB (find::v)))(NP (WP (what::w)))(NP (PRP (you::p)))(VP (VBP (be::v))(VBG (look::v)))(PP (IN (for::i)))))|ET||BS:text|Try Both ;) I'am just trying to be helpful. On a serious note - Please go there. you'll find what you are looking for.|ES||>| |BDV:WSsim|0.0 0.8005682229995728 0.08966762572526932 0.7889324426651001 0.5595598816871643 0.6260497570037842 |EDV||BDV:features|0.303022 0.172976 0.123091 0.000000 0.000000 0.000000 0.285124 0.237289 0.053376 0.267606 0.387435 0.521127 0.073298 0.085714 0.000000 0.000000 0.000000 0.214286 0.000000 0.151511 0.579746 |EDV||BV:threadFeats|MULT_MID:1.000000 POSITION:0.200000 DIAL_Uq_IN:1.000000 CATEGORY_Qatar_Living_Lounge:1.000000 MULT_REAL:0.200000 LENGTH:0.295000 MULT_BOOL:1.000000 |EV||BS:info|Q1_R1_C5|ES|"
@@ -163,33 +168,45 @@ from chatbot import decode
 
 
 active_features = ["tfidf-cosine",
-                   "tfidf-cosine-rank",
+                   "tfidf-cosine-reciprocal-rank",
+                   "tfidf-cosine-arithmetic-rank",
                    "bm25",
-                   "bm25-rank",
+                   "bm25-reciprocal-rank",
+                   "bm25-arithmetic-rank",
                    'embeddings',
-                   'embeddings-rank',
+                   'embeddings-reciprocal-rank',
+                   'embeddings-arithmetic-rank',
                    "tfidf-cosine-generated-question",
-                   "tfidf-cosine-generated-question-rank",
+                   "tfidf-cosine-generated-question-reciprocal-rank",
+                   "tfidf-cosine-generated-question-arithmetic-rank",
                    "bm25-generated-question",
-                   "bm25-generated-question-rank",
+                   "bm25-generated-question-reciprocal-rank",
+                   "bm25-generated-question-arithmetic-rank",
                    "embeddings-generated-question",
-                   "embeddings-generated-question-rank"]
+                   "embeddings-generated-question-reciprocal-rank",
+                   "embeddings-generated-question-arithmetic-rank"]
 
 feature_combinations = [
     ["tfidf-cosine",
-     "tfidf-cosine-rank"],
+     "tfidf-cosine-arithmetic-rank",
+     "tfidf-cosine-reciprocal-rank"],
     ["bm25",
-     "bm25-rank"],
+     "bm25-arithmetic-rank",
+     "bm25-reciprocal-rank"],
     ['embeddings',
-     'embeddings-rank'],
+     "embeddings-arithmetic-rank"
+     'embeddings-reciprocal-rank'],
     ["tfidf-cosine-generated-question",
-     "tfidf-cosine-generated-question-rank"],
+     "tfidf-cosine-generated-question-arithmetic-rank",
+     "tfidf-cosine-generated-question-reciprocal-rank"],
     ["bm25-generated-question",
-     "bm25-generated-question-rank"],
+     "bm25-generated-question-arithmetic-rank",
+     "bm25-generated-question-reciprocal-rank"],
     ["embeddings-generated-question",
-     "embeddings-generated-question-rank"]
+     "embeddings-generated-question-arithmetic-rank",
+     "embeddings-generated-question-reciprocal-rank"]
 ]
-
+question_extractor = QuestionExtractor(max_len=50)
 
 with tf.Session() as sess:
     responder, responder_multiple = decode(sess)
