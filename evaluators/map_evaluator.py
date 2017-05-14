@@ -9,17 +9,13 @@ class MAPEvaluator(Evaluator):
     def __init__(self):
         self.total_docs = 0
         self.meanAvgPrecision = 0.0
-        self.meanAvgPrecisionQ = 0.0
 
     def update(self, question, response, answers, vectorizer):
         answers_transformed = vectorizer.transform([a[0] for a in answers])
         correct = [a[1] for a in answers]
         response = vectorizer.transform([response])
-        question = vectorizer.transform([question])
         score = self.calculateMAP(answers_transformed, response, correct)
-        score_q = self.calculateMAP(answers_transformed, question, correct)
         self.meanAvgPrecision += score
-        self.meanAvgPrecisionQ += score_q
         self.total_docs += 1
 
     def calculateMAP(self, answers, target, correct):

@@ -54,6 +54,7 @@ from evaluators.map_evaluator_summed import MAPEvaluatorSummed
 from evaluators.ttr_evaluator import TTREvaluator
 from evaluators.length_evaluator import LengthEvaluator
 import trainingFilesReader
+from tensorflow.python.ops import embedding_ops
 
 tf.app.flags.DEFINE_float("learning_rate", 0.5, "Learning rate.")
 tf.app.flags.DEFINE_float("learning_rate_decay_factor", 0.99,
