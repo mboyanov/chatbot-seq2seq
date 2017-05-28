@@ -21,7 +21,7 @@ class MAPEvaluator(Evaluator):
     def calculateMAP(self, answers, target, correct):
         distances = cosine_distances(target, answers)
         results = list(zip(distances[0], correct))
-        results.sort()
+        results.sort(key= lambda x: x[0])
         relevant_docs = 0
         score = 0.0
         for i, r in enumerate(results):

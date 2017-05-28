@@ -11,35 +11,35 @@ ql_home = "/home/martin/data/qatarliving"
 
 kelp_files_home = "/home/martin/projects/tutorial/"
 configs = [
-    # {
-    #     'xml': os.path.join(ql_home, 'train/SemEval2016-Task3-CQA-QL-train-concat-with-multiline.xml'),
-    #     'inOutPair': (
-    #         os.path.join(kelp_files_home, 'SemEval2016-Task3-CQA-QL-train-part1-with-multiline.xml.taskA.klp'),
-    #         os.path.join(kelp_files_home,
-    #                      'v8-SemEval2016-Task3-CQA-QL-train-part1-with-multiline-with-bot.xml.taskA.klp')),
-    #     'responsesFile': '/home/martin/projects/machine-translation-scoring/train'
-    # },
-    # {
-    #     'xml': os.path.join(ql_home, 'dev/SemEval2016-Task3-CQA-QL-dev-subtaskA-with-multiline.xml'),
-    #     'inOutPair': (os.path.join(kelp_files_home, 'SemEval2016-Task3-CQA-QL-dev-with-multiline.xml.taskA.klp'),
-    #                   os.path.join(kelp_files_home,
-    #                                'v8-SemEval2016-Task3-CQA-QL-dev-with-multiline-with-bot.xml.taskA.klp')),
-    #     'responsesFile': '/home/martin/projects/machine-translation-scoring/v3-dev'
-    # },
-    # {
-    #     'xml': os.path.join(ql_home, 'test/SemEval2016-Task3-CQA-QL-test-subtaskA-with-multiline.xml'),
-    #     'inOutPair': (os.path.join(kelp_files_home, 'SemEval2016-Task3-CQA-QL-test-with-multiline.xml.taskA.klp'),
-    #                   os.path.join(kelp_files_home,
-    #                                'v8-SemEval2016-Task3-CQA-QL-test-with-multiline-with-bot.xml.taskA.klp')),
-    #     'responsesFile': '/home/martin/projects/machine-translation-scoring/test'
-    # },
-{
-        'xml': os.path.join(ql_home, 'dev/SemEval2016-Task3-CQA-QL-passthrough-subtaskA-with-multiline.xml'),
-        'inOutPair': (os.path.join(kelp_files_home, 'SemEval2016-Task3-CQA-QL-passthrough-with-multiline.xml.taskA.klp'),
-                      os.path.join(kelp_files_home,
-                                   '/tmp/passthrough')),
-        'responsesFile': '/tmp/passthrough-responses'
+    {
+        'xml': os.path.join(ql_home, 'train/SemEval2016-Task3-CQA-QL-train-concat-with-multiline.xml'),
+        'inOutPair': (
+            os.path.join(kelp_files_home, 'SemEval2016-Task3-CQA-QL-train-part1-with-multiline.xml.taskA.klp'),
+            os.path.join(kelp_files_home,
+                         'v10-SemEval2016-Task3-CQA-QL-train-part1-with-multiline-with-bot.xml.taskA.klp')),
+        'responsesFile': '/home/martin/projects/machine-translation-scoring/train'
     },
+    {
+        'xml': os.path.join(ql_home, 'dev/SemEval2016-Task3-CQA-QL-dev-subtaskA-with-multiline.xml'),
+        'inOutPair': (os.path.join(kelp_files_home, 'SemEval2016-Task3-CQA-QL-dev-with-multiline.xml.taskA.klp'),
+                      os.path.join(kelp_files_home,
+                                   'v10-SemEval2016-Task3-CQA-QL-dev-with-multiline-with-bot.xml.taskA.klp')),
+        'responsesFile': '/home/martin/projects/machine-translation-scoring/v3-dev'
+    },
+    {
+        'xml': os.path.join(ql_home, 'test/SemEval2016-Task3-CQA-QL-test-subtaskA-with-multiline.xml'),
+        'inOutPair': (os.path.join(kelp_files_home, 'SemEval2016-Task3-CQA-QL-test-with-multiline.xml.taskA.klp'),
+                      os.path.join(kelp_files_home,
+                                   'v10-SemEval2016-Task3-CQA-QL-test-with-multiline-with-bot.xml.taskA.klp')),
+        'responsesFile': '/home/martin/projects/machine-translation-scoring/test'
+    },
+# {
+#         'xml': os.path.join(ql_home, 'dev/SemEval2016-Task3-CQA-QL-passthrough-subtaskA-with-multiline.xml'),
+#         'inOutPair': (os.path.join(kelp_files_home, 'SemEval2016-Task3-CQA-QL-passthrough-with-multiline.xml.taskA.klp'),
+#                       os.path.join(kelp_files_home,
+#                                    '/tmp/passthrough')),
+#         'responsesFile': '/tmp/passthrough-responses'
+#     },
 ]
 
 data_dir = os.path.join(ql_home, 'matchedPairs_ver5')
@@ -52,15 +52,8 @@ bm25 = data_utils_udc.bm25(data_dir, 'ql')
 print("bm25 initialized")
 
 
-def computeSimilarities(answers, response, vectorizer=default_vectorizer):
-    response_transformed = vectorizer.transform([response])
-    answers_transformed = vectorizer.transform(answers)
-    distances = cosine_distances(response_transformed, answers_transformed)
-    return [1 - x for x in distances[0]]
 
 
-
-from question_extractor import QuestionExtractor
 from match_pairs_mongo_question_comment_extractor import get_qc_pair
 def generateHypothesisReferences(responder, responder_multiple, dp, questionExtractor= lambda x: x):
     """
@@ -71,7 +64,7 @@ def generateHypothesisReferences(responder, responder_multiple, dp, questionExtr
     """
     responses = {}
     for q, answers in reader.read(dp):
-        questions_text = [q]*10
+        questions_text = [q['text']]*10
         answers_text = [a[0] for a in answers]
         answer_ids = [a[2] for a in answers]
         matched_pairs = [get_qc_pair(x) for x in answer_ids]
@@ -97,32 +90,24 @@ def persistResponses(responses, fn):
     return '%s-hyp' % fn, '%s-ref' % fn, order
 
 from embedding_lookup import EmbeddingLookup
-from seq2seq_embedding_lookup import Seq2SeqEmbeddingLookup
+#from seq2seq_embedding_lookup import Seq2SeqEmbeddingLookup
 embedding_vectorizer = EmbeddingLookup("/home/martin/data/qatarliving/embeddings/qatarliving_qc_size100_win10_mincnt5_rpl_skip1_phrFalse_2016_02_23.word2vec.bin")
 
 
+from similarity_computer import SimilarityComputer
 
 def getSimilarities(responses, dp, additional_vectorizers):
-    similarities = defaultdict(dict)
+    similarity_computer = SimilarityComputer(additional_vectorizers)
     for q, answers in reader.read(dp):
         response = responses[answers[0][2]][0]
         responses_to_comments = [responses[a[2]][2] for a in answers]
-        for additional_vectorizer in additional_vectorizers:
-            sims = computeSimilarities([a[0] for a in answers], response, additional_vectorizer['vectorizer'])
-            addSimilarityFeatures(answers, sims, similarities, additional_vectorizer['label'])
-        sims = computeSimilarities([a[0] for a in answers], response)
-        addSimilarityFeatures(answers, sims, similarities, 'tfidf-cosine')
+        similarity_computer.onThread(q,answers, response, responses_to_comments, )
+        q = q['text']
         sims2 = bm25.transform(response, [a[0] for a in answers])
-        addSimilarityFeatures(answers, sims2, similarities, 'bm25')
-        embedding_similarities = computeSimilarities([a[0] for a in answers], response,  embedding_vectorizer)
-        addSimilarityFeatures(answers, embedding_similarities, similarities, 'embeddings')
-        tfidf_generated_question_sims = computeSimilarities(responses_to_comments, q)
-        addSimilarityFeatures(answers, tfidf_generated_question_sims, similarities, 'tfidf-cosine-generated-question')
+        similarity_computer.addSimilarityFeatures(answers, sims2, 'bm25')
         bm25_generated_question_sims = bm25.transform(q, responses_to_comments)
-        addSimilarityFeatures(answers, bm25_generated_question_sims, similarities, 'bm25-generated-question')
-        embedding_similarities_generated_question = computeSimilarities(responses_to_comments, q, embedding_vectorizer)
-        addSimilarityFeatures(answers, embedding_similarities_generated_question, similarities, 'embeddings-generated-question')
-    return similarities
+        similarity_computer.addSimilarityFeatures(answers, bm25_generated_question_sims, 'bm25-generated-question')
+    return similarity_computer.similarities
 
 
 def addSimilarityFeatures(answers, sims, similarities, label):
@@ -223,18 +208,30 @@ feature_combinations = [
      "embeddings-generated-question-arithmetic-rank",
      "embeddings-generated-question-reciprocal-rank"]
 ]
-question_extractor = QuestionExtractor(max_len=50)
+
 
 with tf.Session() as sess:
     responder, responder_multiple = decode(sess)
-    seq2seq_embedding_vectorizer = Seq2SeqEmbeddingLookup(sess)
+    #seq2seq_embedding_vectorizer = Seq2SeqEmbeddingLookup(sess)
     for config in configs:
         print("Processing %s" % config['xml'])
         responses = generateHypothesisReferences(responder, responder_multiple, config['xml'])
         print("Hypotheses generated %s" % config['xml'])
         hyp_file, ref_file, order = persistResponses(responses, config['responsesFile'])
         print("Hypotheses persisted %s" % config['xml'])
-        similarity_features = getSimilarities(responses, config['xml'], [{ 'vectorizer': seq2seq_embedding_vectorizer, 'label':'seq2seq_embeddings'}])
+        additional_vectorizers = [
+            {'vectorizer': default_vectorizer,
+             'label': 'tfidf-cosine'
+             },
+            # { 'vectorizer': seq2seq_embedding_vectorizer,
+            #   'label': 'seq2seq_embeddings'
+            # },
+            {
+                'vectorizer': embedding_vectorizer,
+                'label': 'embeddings'
+            }
+        ]
+        similarity_features = getSimilarities(responses, config['xml'], additional_vectorizers)
    #     mt_features = getMachineTranslationFeatures(hyp_file, ref_file, order)
         print("Similarities computed %s" % config['xml'])
         inOutPair = config['inOutPair']

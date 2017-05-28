@@ -9,7 +9,7 @@ class PersisterEvaluator(Evaluator):
 
     def update(self, question, response, answers, vectorizer):
         answers = [a[0] for a in answers if a[1]]
-        self.inputs.append((question, response, answers))
+        self.inputs.append((question['text'], response, answers))
 
     def results(self):
         with open(self.path, 'w') as out:

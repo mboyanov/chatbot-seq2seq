@@ -15,7 +15,7 @@ class MAPEvaluatorSummed(Evaluator):
         answers_transformed = vectorizer.transform([a[0] for a in answers])
         correct = [a[1] for a in answers]
         response = vectorizer.transform([response])
-        question = vectorizer.transform([question])
+        question = vectorizer.transform([question['text']])
         score = self.calculateMAP(answers_transformed, response, question, correct)
         self.meanAvgPrecision += score
         self.total_docs += 1
@@ -25,7 +25,7 @@ class MAPEvaluatorSummed(Evaluator):
         distances_q = cosine_distances(question, answers)
         distances_sum = distances + distances_q
         results = list(zip(distances_sum[0], correct))
-        results.sort()
+        results.sort(key=lambda x: x[0])
         relevant_docs = 0
         score = 0.0
         for i, r in enumerate(results):

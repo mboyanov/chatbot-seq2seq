@@ -54,7 +54,9 @@ from evaluators.map_evaluator_summed import MAPEvaluatorSummed
 from evaluators.ttr_evaluator import TTREvaluator
 from evaluators.length_evaluator import LengthEvaluator
 import trainingFilesReader
-from tensorflow.python.ops import embedding_ops
+from evaluators.megamap_evaluator import MegaMAPEvaluator
+from embedding_lookup import EmbeddingLookup
+from seq2seq_embedding_lookup import Seq2SeqEmbeddingLookup
 
 tf.app.flags.DEFINE_float("learning_rate", 0.5, "Learning rate.")
 tf.app.flags.DEFINE_float("learning_rate_decay_factor", 0.99,
@@ -76,6 +78,8 @@ tf.app.flags.DEFINE_boolean("decode", False,
                             "Set to True for interactive decoding.")
 tf.app.flags.DEFINE_boolean("eval", False,
                             "Set to True for evaluation")
+tf.app.flags.DEFINE_boolean("bleu_all", False,
+                            "Set to True for evaluation")
 tf.app.flags.DEFINE_boolean("explore", False,
                             "run exploration statistics")
 tf.app.flags.DEFINE_boolean("use_fp16", False,
@@ -91,7 +95,7 @@ _buckets = [(5, 10), (10, 15), (20, 25), (40,45)]
 
 
 
-def create_model(session, forward_only):
+def create_model(session, forward_only, model_path=None):
   """Create translation model and initialize or load parameters in session."""
   dtype = tf.float16 if FLAGS.use_fp16 else tf.float32
   dropout = 0.3
@@ -109,6 +113,11 @@ def create_model(session, forward_only):
       forward_only=forward_only,
       dtype=dtype,
       dropout=dropout)
+
+  if model_path is not None:
+      print("Reading model parameters from %s" % model_path)
+      model.saver.restore(session, model_path)
+      return model
   ckpt = tf.train.get_checkpoint_state(FLAGS.train_dir)
   if ckpt:
     print("Reading model parameters from %s" % ckpt.model_checkpoint_path)
@@ -133,7 +142,7 @@ def train():
                                         "ds": "udc"
                                    },
                                    {
-                                       "num_steps": 0,
+                                       "num_steps": 500000,
                                        "path": os.path.join(ql_home, 'matchedPairs_ver5/'),
                                        "ds": "ql"
                                    }, {
@@ -154,13 +163,14 @@ def train():
     # Read data into buckets and compute their sizes.
     print("Reading development and training data (limit: %d)."
           % FLAGS.max_train_data_size)
+    previous_losses = []
     while True:
-        trainABit(execution_plan)
+        trainABit(execution_plan, previous_losses=previous_losses)
         tf.reset_default_graph()
-        evaluate(tokenizer, vectorizer)
+        evaluate(tokenizer, vectorizer, previous_losses = previous_losses)
         tf.reset_default_graph()
 
-def trainABit(execution_plan):
+def trainABit(execution_plan, previous_losses = []):
   with tf.Session() as sess:
     # Create model.
     print("Creating %d layers of %d units." % (FLAGS.num_layers, FLAGS.size))
@@ -179,7 +189,6 @@ def trainABit(execution_plan):
     # This is the training loop.
     step_time, loss = 0.0, 0.0
     current_step = 0
-    previous_losses = []
     while current_step <= 10 * FLAGS.steps_per_checkpoint:
       progress_bar.printProgressBar(current_step, 10 * FLAGS.steps_per_checkpoint)
       # Choose a bucket according to data distribution. We pick a random number
@@ -231,9 +240,9 @@ def trainABit(execution_plan):
 
         sys.stdout.flush()
 
-def evaluate(tokenizer = None, vectorizer = None):
+def evaluate(tokenizer = None, vectorizer = None, model_path=None, previous_losses =[]):
     with tf.Session() as sess:
-        model = create_model(sess, True)
+        model = create_model(sess, True, model_path)
         if tokenizer is None:
             vocab_path = os.path.join(FLAGS.data_dir,
                                       "vocab%d.qa" % FLAGS.en_vocab_size)
@@ -242,8 +251,8 @@ def evaluate(tokenizer = None, vectorizer = None):
         if vectorizer is None:
             vectorizer = data_utils_udc.tfidfVectorizer(FLAGS.data_dir, tokenizer_normal.vocab, FLAGS.dataset_type)
 
-        evaluateDataset(model, sess, tokenizer, vectorizer, 'test')
-        MAP_dev, BLEU_dev = evaluateDataset(model, sess, tokenizer, vectorizer, 'dev')
+        evaluateDataset(model, sess, tokenizer, vectorizer, 'test', previous_losses)
+        MAP_dev, BLEU_dev, MEGAMAP_dev = evaluateDataset(model, sess, tokenizer, vectorizer, 'dev', previous_losses)
         checkpoint_path = os.path.join(FLAGS.train_dir, "translate.ckpt")
 
         if MAP_dev > model.best_map.eval():
@@ -251,6 +260,14 @@ def evaluate(tokenizer = None, vectorizer = None):
             sess.run(model.best_map.assign(MAP_dev))
             model.map_saver.save(sess, FLAGS.train_dir+"/best-map/", global_step=model.global_step.eval())
             model.saver.save(sess, checkpoint_path, global_step=model.global_step.eval())
+        for (label, map_score) in MEGAMAP_dev.items():
+            if map_score > model.best_map.eval():
+                print("MAP increased from %.2f to %.2f due to %s" % (model.best_map.eval(), map_score, label))
+                sess.run(model.best_map.assign(map_score))
+                model.map_saver.save(sess, FLAGS.train_dir+"/best-map/", global_step=model.global_step.eval())
+                model.saver.save(sess, checkpoint_path, global_step=model.global_step.eval())
+
+
         if BLEU_dev > model.best_bleu.eval():
             print("BLEU increased from %.2f to %.2f" % (model.best_bleu.eval(), BLEU_dev))
             sess.run(model.best_bleu.assign(BLEU_dev))
@@ -260,7 +277,21 @@ def evaluate(tokenizer = None, vectorizer = None):
               (model.global_step.eval(), MAP_dev, BLEU_dev))
 
 
-def evaluateDataset(model, sess, tokenizer, vectorizer, ds):
+def evaluateDataset(model, sess, tokenizer, vectorizer, ds, previous_losses=None):
+
+    embedding_vectorizer = EmbeddingLookup(
+        "/home/martin/data/qatarliving/embeddings/qatarliving_qc_size100_win10_mincnt5_rpl_skip1_phrFalse_2016_02_23.word2vec.bin")
+    seq2seq_embedding_vectorizer = Seq2SeqEmbeddingLookup(sess)
+    additional_vectorizers = [
+        {'vectorizer': vectorizer,
+         'label': 'tfidf-cosine'
+         },
+        {
+            'vectorizer': embedding_vectorizer,
+            'label': 'embeddings'
+        }
+    ]
+    from evaluators.bleu_single_evaluator import BLEUSingleEvaluator
     evaluators = [BLEUEvaluator(),
                   MAPEvaluator(),
                   PersisterEvaluator(
@@ -268,27 +299,65 @@ def evaluateDataset(model, sess, tokenizer, vectorizer, ds):
                   VocabularyEvaluator(),
                   MAPEvaluatorSummed(),
                   LengthEvaluator(),
-                  TTREvaluator()]
+                  TTREvaluator(),
+                  MegaMAPEvaluator(additional_vectorizers),
+                  BLEUSingleEvaluator()
+                  ]
     visitDatasetParameterized(sess, model, tokenizer, vectorizer, ds, evaluators)
     MAP = evaluators[1].results()
-    BLEU = evaluators[0].results()
+    bleu_results = evaluators[0].results()
+    BLEU = bleu_results['BLEU']
+    BLEU_ALL = bleu_results['BLEU_ALL']
+    MAP_BLEU = evaluators[8].results()['MAP-BLEU']
+    meanAvgBLEU = evaluators[8].results()['meanAvgBLEU']
     ## Persister evaluator saves in a different file, so just call results()
     evaluators[2].results()
     vocab_eval = evaluators[3].results()
     MAP_SUMMED = evaluators[4].results()
     LENGTH = evaluators[5].results()
     TTR = evaluators[6].results()
+    MEGA_MAP_SCORES = evaluators[7].results()
     score_path = os.path.join(FLAGS.train_dir, 'scoreEvolution-%s' % ds)
     if not os.path.isfile(score_path):
         with open(score_path, 'w') as out:
-            out.write("\t".join(
-                ["Global step", "MAP", "MAP_SUMMED", "BLEU", "Vocab size", "Target Vocab Size", "Intersection Vocab size", "LENGTH", "TTR"]) + "\n")
+            metrics = ["Global step", "Training Perplexity",
+                 "MAP",
+                 "MAP_SUMMED",
+                 "MAP-tfidf",
+                 "MAP-tfidf_SUMMED",
+                 "MAP-embeddings",
+                 "MAP-embeddings_SUMMED",
+                 "MAP-bm25",
+                 "MAP-bm25_SUMMED",
+                 "MAP_AVG",
+                 "MAP_BLEU_SUMMED",
+                 "MAP-BLEU",
+                 "meanAvgBLEU",  "BLEU_POS", "BLEU_ALL", "Vocab size",
+                 "Target Vocab Size", "Intersection Vocab size", "LENGTH", "TTR"]
+            out.write("\t".join(metrics) + "\n")
     with open(score_path, 'a') as out:
         out.write("\t".join([
-            str(model.global_step.eval()), str(MAP), str(MAP_SUMMED), str(BLEU), str(vocab_eval[0][1]), str(vocab_eval[1][1]),
-            str(vocab_eval[2][1]), str(LENGTH), str(TTR)
+            str(model.global_step.eval()),
+            str(previous_losses[-1]) if len(previous_losses) > 0 else 'n/a',
+            str(MAP),
+            str(MAP_SUMMED),
+            str(MEGA_MAP_SCORES['tfidf-cosine']),
+            str(MEGA_MAP_SCORES['tfidf-cosine_SUMMED']),
+            str(MEGA_MAP_SCORES['embeddings']),
+            str(MEGA_MAP_SCORES['embeddings_SUMMED']),
+            str(MEGA_MAP_SCORES['bm25']),
+            str(MEGA_MAP_SCORES['bm25_SUMMED']),
+            str(MEGA_MAP_SCORES['MAP_AVG']),
+            str(MEGA_MAP_SCORES['bleu_map_SUMMED']),
+            str(MAP_BLEU), str(meanAvgBLEU),
+            str(BLEU), str(BLEU_ALL),
+            str(vocab_eval[0][1]),
+            str(vocab_eval[1][1]),
+            str(vocab_eval[2][1]),
+            str(LENGTH),
+            str(TTR)
         ]) + "\n")
-    return MAP, BLEU
+    return MAP, BLEU, MEGA_MAP_SCORES
 
 
 def decode(sess):
@@ -388,7 +457,7 @@ def visitDatasetParameterized(sess, model, tokenizer, vectorizer, ds, evaluators
         if sum(correct) == 0:
             continue
         questionAnswers.append((q, answers))
-    generated_responses = generateMultipleResponses([questionAnswer[0] for questionAnswer in questionAnswers], model, tokenizer, sess)
+    generated_responses = generateMultipleResponses([questionAnswer[0]['text'] for questionAnswer in questionAnswers], model, tokenizer, sess)
     for response, (q, answers) in zip(generated_responses, questionAnswers):
         for evaluator in evaluators:
             evaluator.update(q, response, answers, vectorizer)
@@ -430,6 +499,10 @@ def main(_):
                 sentence = sys.stdin.readline()
     elif FLAGS.eval:
         evaluate()
+    elif FLAGS.bleu_all:
+        for i in range(2000, 202000, 2000):
+            evaluate(model_path="/mnt/8C24EDC524EDB1FE/data/model_dir_ver_ranlp3/translate.ckpt-%s" %str(i))
+            tf.reset_default_graph()
     else:
         train()
 

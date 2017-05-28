@@ -15,3 +15,4 @@ class LengthEvaluator(Evaluator):
 
     def results(self):
         return self.length/self.total_docs
+
