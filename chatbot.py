@@ -85,6 +85,7 @@ tf.app.flags.DEFINE_boolean("explore", False,
 tf.app.flags.DEFINE_boolean("use_fp16", False,
                             "Train using fp16 instead of fp32.")
 tf.app.flags.DEFINE_string("dataset_type", "udc", "udc or ql")
+tf.app.flags.DEFINE_boolean('prepare_unfiltered', False, "Set to true if unfiltered data should be prepared")
 FLAGS = tf.app.flags.FLAGS
 
 # We use a number of buckets and pad to the closest one for efficiency.
@@ -131,27 +132,30 @@ def create_model(session, forward_only, model_path=None):
 from execution_plan import ExecutionPlan
 
 def train():
-    execution_plan = ExecutionPlan('/home/martin/data/udc/',
-                                   os.path.join(ql_home, 'matchedPairs_ver5/'),
-                                   0,
-                                   0,
+
+
+    steps = []
+    for i in range(10):
+        steps.append({
+                    "num_steps": 10000,
+                    "path": "/home/martin/data/udc/",
+                    "ds": "udc"
+                   })
+        steps.append({
+                "num_steps": 10000,
+                "path": os.path.join(ql_home, 'matchedPairs_ver5/filtered/'),
+                "ds": "ql-filtered"
+            })
+
+    execution_plan = ExecutionPlan(
                                    FLAGS.en_vocab_size,
-                                   _buckets, [{
-                                        "num_steps": 0,
-                                        "path": "/home/martin/data/udc/",
-                                        "ds": "udc"
-                                   },
-                                   {
-                                       "num_steps": 500000,
-                                       "path": os.path.join(ql_home, 'matchedPairs_ver5/'),
-                                       "ds": "ql"
-                                   }, {
-                                        "num_steps": 50000,
-                                        "path": "/mnt/8C24EDC524EDB1FE/data/friends/",
-                                        "ds": "friends"
-                                    }])
+                                   _buckets, steps)
     questions_train, answers_train, questions_dev, answers_dev, _, _, _, = data_utils_udc.prepare_data(
         FLAGS.data_dir, FLAGS.en_vocab_size, FLAGS.dataset_type)
+
+    data_utils_udc.prepare_data('/home/martin/data/udc/', FLAGS.en_vocab_size, 'udc')
+    if FLAGS.prepare_unfiltered:
+        data_utils_udc.prepare_data(os.path.join(FLAGS.data_dir, 'unfiltered'), FLAGS.en_vocab_size, 'ql')
     print("reading dictionaries")
     vocab_path = os.path.join(FLAGS.data_dir,
                               "vocab%d.qa" % FLAGS.en_vocab_size)
@@ -360,9 +364,9 @@ def evaluateDataset(model, sess, tokenizer, vectorizer, ds, previous_losses=None
     return MAP, BLEU, MEGA_MAP_SCORES
 
 
-def decode(sess):
+def decode(sess, model_path = None):
     # Create model and load parameters.
-    model = create_model(sess, True)
+    model = create_model(sess, True, model_path=model_path)
     tokenizer = getVocabularies()
 
     def responder(sentence):
@@ -464,13 +468,13 @@ def visitDatasetParameterized(sess, model, tokenizer, vectorizer, ds, evaluators
 
 
 def explore():
-    explorer.explore([{
-        'name': 'dev',
-        'reader': QLXMLReaderPy.read(ql_sets["dev"])
-    }, {
-        'name': 'test',
-        'reader' : QLXMLReaderPy.read(ql_sets['test'])
-    }], data_utils_udc.bpe_tokenizer)
+    # explorer.explore([{
+    #     'name': 'dev',
+    #     'reader': QLXMLReaderPy.read(ql_sets["dev"])
+    # }, {
+    #     'name': 'test',
+    #     'reader' : QLXMLReaderPy.read(ql_sets['test'])
+    # }], data_utils_udc.bpe_tokenizer)
     questions_train, answers_train, _, _, _, _, _, = data_utils_udc.prepare_data(
         FLAGS.data_dir, FLAGS.en_vocab_size, FLAGS.dataset_type)
 
@@ -478,6 +482,10 @@ def explore():
         'name': 'train',
         'reader': trainingFilesReader.read(questions_train, answers_train)
     }], lambda x: x.split(), flat=True)
+    # explorer.explore([{
+    #     'name': 'train-filtered',
+    #     'reader': trainingFilesReader.read(questions_train, answers_train)
+    # }], lambda x: x.split(), flat=True)
 
 
 

@@ -30,5 +30,5 @@ def responder(s):
 if __name__ == "__main__":
     with tf.Session() as sess:
         responder, _ = decode(sess)
-        app.run(host="0.0.0.0")
+        app.run(host="192.168.0.109")
 

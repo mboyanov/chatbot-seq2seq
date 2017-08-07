@@ -64,7 +64,7 @@ def create_vocabulary(vocabulary_path, data_path, max_vocabulary_size, dataset_r
     if not os.path.isfile(vocabulary_path):
         print("Creating vocabulary %s from data %s" % (vocabulary_path, data_path))
         vocab_list = tokenizer.fit(dataset_reader.conversations(data_path), max_vocabulary_size, _START_VOCAB)
-        with open(vocabulary_path, mode="wb") as vocab_file:
+        with open(vocabulary_path, mode="w") as vocab_file:
             for w in vocab_list:
                 if persist_counts:
                     vocab_file.write(str(w[0]) +" " + str(w[1]) + "\n")
@@ -155,10 +155,16 @@ def data_to_token_ids(data_path, questions_path, answers_path, vocabulary_path, 
                 if token_ids is not None and token_ids_answer is not None:
                     lengths_q.append(len(token_ids))
                     lengths_a.append(len(token_ids_answer))
-                    questions_tokens_file.write(" ".join([str(tok) for tok in token_ids]) + "\n")
-                    answers_tokens_file.write(" ".join([str(tok) for tok in token_ids_answer]) + "\n")
+                   # questions_tokens_file.write(" ".join([str(tok) for tok in token_ids]) + "\n")
+                   # answers_tokens_file.write(" ".join([str(tok) for tok in token_ids_answer]) + "\n")
     print(questions_path, 'stats', np.mean(lengths_q), np.std(lengths_q))
     print(answers_path, 'stats', np.mean(lengths_a), np.std(lengths_a))
+
+#d_path = '/home/martin/data/udc/train.csv'
+#v_path = '/home/martin/data/udc/vocab40000.qa.2'
+#create_vocabulary(v_path, d_path, 40000, UDCDatasetReader(), tokenizer=default_tokenizer)
+#data_to_token_ids(d_path, '/tmp/q','/tmp/a', v_path, UDCDatasetReader())
+#a = 1/0
 
 
 def prepare_data(data_dir, vocabulary_size, dataset_type, tokenizer=default_tokenizer):
@@ -237,9 +243,15 @@ def getReadersByDatasetType(dataset_type):
         reader = FriendsHTMLReader()
         return reader, reader
     else:
-        #filteredReader = FilteredDatasetReader()
+        filteredReader = FilteredDatasetReader()
         qlReader = QLDatasetReader()
         return qlReader, qlReader
+
+# filteredReader = FilteredDatasetReader()
+# data_path = "/home/martin/data/qatarliving/matchedPairs_ver5/train.csv"
+# with open("/tmp/train.csv", 'w') as out:
+#     for filtered_line in filteredReader.conversations(data_path, yield_fn=lambda x:x):
+#         out.write("\t".join(filtered_line).strip() + "\n")
 
 
 # r1, r2 = getReadersByDatasetType('ql')

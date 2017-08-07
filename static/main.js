@@ -24,7 +24,7 @@ var uuid = guid();
 //edit this function to change what the chatbot says
 function chatbotResponse(user_message) {
   botMessage = "I'm confused"; //the default message
-  $.getJSON( "http://130.204.203.149:5000", {"message": user_message, "uuid": uuid}, function( data ) {
+  $.getJSON( "http://192.168.0.109:5000", {"message": user_message, "uuid": uuid}, function( data ) {
     botMessage = data['message'];
     userMessage = "<p class='triangle-border left'><b>You:</b> " + user_message + "</p>"
     $('#entries').append(userMessage);

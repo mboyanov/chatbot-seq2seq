@@ -31,11 +31,11 @@ class FilteredDatasetReader(QLDatasetReader):
     def __init__(self):
         df = pd.read_csv("joined-ids-predictions-from_test.csv", sep="\t")
         only_good = (df['prediction'] > 0) & (df['from_test'] == False)
-        self.allowed_ids = set(df[only_good]['question_id'])
+        self.allowed_ids = set(df[only_good]['comment_id'])
         print("allowed ids", len(self.allowed_ids))
 
     def exclude_fn(self, item):
-        return item[0] not in self.allowed_ids
+        return item[1] not in self.allowed_ids
 
     def good_ids(data_path):
         df_list = []
@@ -92,7 +92,7 @@ class FilteredDatasetReader(QLDatasetReader):
     def words(self, data_path, tokenizer):
         return super(FilteredDatasetReader, self).words(data_path, tokenizer, self.exclude_fn)
 
-    def conversations(self, data_path, yield_fn= lambda x: x):
+    def conversations(self, data_path, yield_fn= lambda x: (x[6], x[7])):
         return super(FilteredDatasetReader, self).conversations(data_path, self.exclude_fn, yield_fn)
 
 #r = FilteredDatasetReader()

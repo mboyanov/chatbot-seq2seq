@@ -16,21 +16,21 @@ configs = [
         'inOutPair': (
             os.path.join(kelp_files_home, 'SemEval2016-Task3-CQA-QL-train-part1-with-multiline.xml.taskA.klp'),
             os.path.join(kelp_files_home,
-                         'v10-SemEval2016-Task3-CQA-QL-train-part1-with-multiline-with-bot.xml.taskA.klp')),
+                         'ranlp_ver_7-SemEval2016-Task3-CQA-QL-train-part1-with-multiline-with-bot.xml.taskA.klp')),
         'responsesFile': '/home/martin/projects/machine-translation-scoring/train'
     },
     {
         'xml': os.path.join(ql_home, 'dev/SemEval2016-Task3-CQA-QL-dev-subtaskA-with-multiline.xml'),
         'inOutPair': (os.path.join(kelp_files_home, 'SemEval2016-Task3-CQA-QL-dev-with-multiline.xml.taskA.klp'),
                       os.path.join(kelp_files_home,
-                                   'v10-SemEval2016-Task3-CQA-QL-dev-with-multiline-with-bot.xml.taskA.klp')),
+                                   'ranlp_ver_7-SemEval2016-Task3-CQA-QL-dev-with-multiline-with-bot.xml.taskA.klp')),
         'responsesFile': '/home/martin/projects/machine-translation-scoring/v3-dev'
     },
     {
         'xml': os.path.join(ql_home, 'test/SemEval2016-Task3-CQA-QL-test-subtaskA-with-multiline.xml'),
         'inOutPair': (os.path.join(kelp_files_home, 'SemEval2016-Task3-CQA-QL-test-with-multiline.xml.taskA.klp'),
                       os.path.join(kelp_files_home,
-                                   'v10-SemEval2016-Task3-CQA-QL-test-with-multiline-with-bot.xml.taskA.klp')),
+                                   'ranlp_ver_7-SemEval2016-Task3-CQA-QL-test-with-multiline-with-bot.xml.taskA.klp')),
         'responsesFile': '/home/martin/projects/machine-translation-scoring/test'
     },
 # {

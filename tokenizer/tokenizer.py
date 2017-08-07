@@ -30,7 +30,10 @@ class Tokenizer:
             for t in self.tokenize(a):
                 vocab[t] += 1
 
-        print("Total words %i" % len(vocab))
+        print("Total types %i" % len(vocab))
+        total_tokens = sum(vocab.values())
+        print("Total tokens %i" % total_tokens)
+
         sorted_vocab = sorted(vocab.items(), key=lambda x: x[1], reverse=True)
         vocab_list = [(x, 999999999) for x in reserved_list] + sorted_vocab
         print("Top 20 ", vocab_list[:20])
@@ -176,7 +179,13 @@ class BPETokenizer(Tokenizer):
         return word, word_indices
 
 
+tokenizer = Tokenizer('_UNK_')
+tokens = tokenizer.tokenize("Hello :)")
+
+
 a = BPETokenizer(open("/home/martin/projects/subword-nmt/vocab_bpe"), [b"GO", b"UNK", b"_EOS", b"_PAD"])
+tokens = a.transform("hello :)")
+
 t = a.transform("i'm considering to take on a job opportunity in doha however as i am married with my male partner who is not a european i would need to know if i could have him granted a visa on the gounds of him being my legal partner and if my life would turn into a living hell once in qatar .")
 t2 = a.inverse_transform(t+[1])
 inp = [122, 2, 1172,63,33,2866,234,158,2177,73,4,3,2,1,0]

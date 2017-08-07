@@ -2,24 +2,10 @@ import data_utils_udc
 import trainingFilesReader
 class ExecutionPlan:
 
-    def __init__(self, udc_path, ql_path, udc_steps, ql_steps, vocab_size, _buckets, more_steps = []):
+    def __init__(self, vocab_size, _buckets, more_steps = []):
         self.steps = [
-            {
-                "ds": "udc",
-                "num_steps": udc_steps,
-                "path": udc_path
-            },
-            {
-                "ds": "ql",
-                "num_steps": ql_steps,
-                "path": ql_path
-            }
 
         ] + more_steps
-        self.udc_path = udc_path
-        self.ql_path = ql_path
-        self.udc_steps = udc_steps
-        self.ql_steps = ql_steps
         self.vocab_size = vocab_size
         self.current_data = {}
         self.buckets = _buckets
@@ -36,7 +22,7 @@ class ExecutionPlan:
                 if current_step['ds'] not in self.current_data:
                     self.current_data[current_step['ds']] = read_data(questions_dev, answers_dev, self.buckets), read_data(questions_train, answers_train, self.buckets)
                 return self.current_data[current_step['ds']]
-
+            acccumulated_step += current_step['num_steps']
 
 def read_data(source_path, target_path, _buckets, max_size=None):
     """Read data from source and target files and put into buckets.
