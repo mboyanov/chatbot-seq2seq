@@ -12,6 +12,17 @@ Links to the training data are available in the following table:
 | [QatarLiving Full](https://drive.google.com/open?id=0BxYLkQRqdXrcVHI4UmJEYWFMUEE)  | Contains pairs of (Q,A) sentences derived from the QL dump via averaging embeddings| 1716698
 | [QatarLiving Relevant](https://drive.google.com/file/d/0BxYLkQRqdXrcelctZUJtT2hhdGc/view?usp=sharing)  | Same as QatarLiving Full, but only contains the (Q,A) pairs where the answer A is deemed relevant to the question Q by a state of the art classifier| 525712
 
+
+In order to evaluate the model you will also need the [evaluation data](http://alt.qcri.org/semeval2016/task3/data/uploads/semeval2016-task3-cqa-ql-traindev-v3.2.zip) from the Semeval Task. The datasets can be summarized as follows:
+
+| Dataset           | Description   | Number of (Q,A) pairs
+| -------------     | ------------- | -------------
+| QatarLiving Dev   | Golden relevancy judgments used for model selection | 2440
+| QatarLiving Test  | Golden relevancy judgments used for final evaluation| 3270
+
+
+To run the model, one also need a BPE vocabulary. The one we used is available [here](https://drive.google.com/file/d/0BxYLkQRqdXrcWTNiaW5HVWYtcHc/view?usp=sharing).
+
 # Description
 The project wraps the TensorFlow seq2seq implementation to generate responses to questions posed by users in an online forum.
 The procedure is as follows:
@@ -37,7 +48,15 @@ Thus, we propose using the ranking metric Mean Average Precision (MAP) to evalua
 # Results
 
 ## Automated Evaluation
-Coming soon
+
+We experimented with different model selection criteria to measure which one would be best at solving the Community Question Answering Task. Choosing the model achieving the best ranking on the dev set, produces the best ranking on the test set, but also achieves higher BLEU scores.
+
+| Optimizing for | MAP            | BLEU |
+| -------------- | ---------------| -----------------|
+| MAP            |  63.45         |  9.18            |
+| BLEU           |  62.64         |   8.16           |
+| Seq2Seq Loss   |  62.81         |   7.00           |
+
 ## Manual Evaluation
 
 The manual evaluation was based on the following [100 questions and answers given by three of the models](https://drive.google.com/open?id=1tuaAPOlqyOC5qeyLinx52HKIN9ohZqre1j0bxh2ERl8). The first 50 questions are taken from the test dataset,
@@ -45,6 +64,29 @@ whereas the latter are new, but still related to the forum topics. The answers p
 
 | Optimizing for | Questions 1-50 | Questions 50-100 | Question 1-100 |
 | -------------- | ---------------| -----------------| -------------- |
-| MAP            |  49.50 %       |  45.00 %         | 47.25 %         |
-| BLEU           | 21.00 %        | 11.00 %          | 16.00 %
+| MAP            |  49.50 %       |  45.00 %         | 47.25 %        |
+| BLEU           | 21.00 %        | 11.00 %          | 16.00 %        |
 | Seq2Seq Loss   | 46.50 %        | 37.00 %          | 41.75 %        | 
+
+
+
+# Pretrained models
+
+We provide the following pretrained models. They are checkpoints of the same model, but selected by a different criteria. The parameters of the models were as follows:
+
+1. vocabulary size: 40,000 subword units available [here](https://drive.google.com/open?id=0BxYLkQRqdXrcWTNiaW5HVWYtcHc);
+2. dimensionality of the embedding vectors: 256;
+3. RNN cell: 2-layered GRU cell with 256 units; 
+4. minibatch size: 80; 
+5. learning rate: 0.5; 
+6. buckets: [(5, 10), (10, 15), (20, 25), (40,45)].
+
+
+| Model | Metric | Iteration | 
+| ------------------| ---------------| -----------------|
+| [MAP-model](https://drive.google.com/open?id=0BxYLkQRqdXrcOXBUQi0yUjZ6Y2s)          |  MAP      |  192000         | 
+| [BLEU-model](https://drive.google.com/open?id=0BxYLkQRqdXrcWFRkLUF0NlBXV00)         | BLEU         |  16000        | 
+| [Seq2Seq Loss-model](https://drive.google.com/open?id=0BxYLkQRqdXrcVVRqWnVOTE1Ta3M) | Perplexity        | 200000          | 
+
+
+
