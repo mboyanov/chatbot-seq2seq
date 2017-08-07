@@ -1,7 +1,21 @@
 # Building Chatbots from Forum Data: Model Selection Using Question Answering Metrics
 
-This project explores how we can leverage existing forum data to create a question answering chatbot which provides informative
-answers. 
+This project explores how we can leverage existing forum data to create a question answering chatbot which provides informative answers. 
+
+Please, cite the following paper if you use the resources below:
+```bib
+@InProceedings{boyanov-nakov-moschitti-martino-koychev:2017:RANLP},
+  author    = {Martin Boyanov, Preslav Nakov, Alessandro Moschitti, Giovanni da San Martino, Ivan Koychev },
+  title     = {Building Chatbots from Forum Data: Model Selection Using Question Answering Metrics},
+  booktitle = {In Proceedings of the International Conference Recent Advances in Natural Language Processing 2017 },
+  series = {RANLP~'17},
+  address   = {Varna, Bulgaria},
+  month     = {September},
+  year      = {2017}
+  }
+```
+
+
 
 The description and result paper is available [here](https://drive.google.com/open?id=0BxYLkQRqdXrcdEQxZTVURllfNFU).
 Links to the training data are available in the following table:
@@ -33,11 +47,11 @@ The procedure is as follows:
 The main focus of the project is in the evaluation step. Evaluating chatbots based on BLEU tends to overfit on the language model.
 Instead, we are interested in creating a conversational interface which will actually answer the question.
 
-To select such a model we propose evaluating the chatbot with respect to it's ability to solve the [SemEval Task 3](http://alt.qcri.org/semeval2017/task3/). The assumption is that informative
+To select such a model we propose to evaluate the chatbot with respect to it's ability to solve the [SemEval Task 3](http://alt.qcri.org/semeval2017/task3/). The assumption is that informative
 responses generated from the chatbot should be similar to those marked relevant by the annotators and dissimilar to those marked Bad. Thus, similarity
 with the chatbot generated responses should provide a good relevancy ranking. 
 
-Thus, we propose using the ranking metric Mean Average Precision (MAP) to evaluate the chatbot as it trains. The ranking produced from several similarity functions is studied:
+Thus, we propose to use the ranking metric Mean Average Precision (MAP) to evaluate the chatbot as it trains. The ranking produced from several similarity functions is studied:
  - cosine - the cosine distance between the tfidf vectors of the generated response and the original response.
  - bm25 - the bm25 similarity between the generated response and the original response.
  - cosine-embeddings - the cosine distance between the embeddings vectors of the generated response and the original response.
