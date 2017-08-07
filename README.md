@@ -3,8 +3,7 @@
 This project explores how we can leverage existing forum data to create a question answering chatbot which provides informative
 answers. 
 
-The description and result paper is available here: TODO.
-
+The description and result paper is available [here](https://drive.google.com/open?id=0BxYLkQRqdXrcdEQxZTVURllfNFU).
 Links to the training data are available in the following table:
 
 | Dataset           | Description   | Number of (Q,A) pairs
